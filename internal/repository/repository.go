@@ -1,6 +1,7 @@
 package repository
 
 import (
+	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/model"
 	"database/sql"
 	"errors"
@@ -17,9 +18,6 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// ===================================================================  ===================================================================
-// =================================================================== CARD MACHINE ===================================================================
-// =================================================================== CARD MACHINE ===================================================================
 // Create the table CardMachine (the table principal)
 // The fun Exec execute a query in engine the database and return a result and a error
 func (r *Repository) CreateTableOfCardMachine() (sql.Result, error) {
@@ -43,7 +41,7 @@ func (r *Repository) InsertValueInCardMachine(cardMachine *model.CardMachine) (s
 }
 
 // Get all values in the thable CardMachine
-func (r *Repository) GetAllValuesInCardMachine() ([]model.CardMachine, error) {
+func (r *Repository) GetAllValuesInCardMachine() (*model.CardMachine, error) {
 	query := `SELECT * FROM bank_machine`
 	row, err := r.db.Query(query)
 	if err != nil {
@@ -53,7 +51,7 @@ func (r *Repository) GetAllValuesInCardMachine() ([]model.CardMachine, error) {
 
 	defer row.Close() // Close the rows after processing to free up resources
 
-	machine := []model.CardMachine{}
+	machine := &model.CardMachine{}
 
 	for row.Next() {
 		var cardMachine model.CardMachine
@@ -62,7 +60,7 @@ func (r *Repository) GetAllValuesInCardMachine() ([]model.CardMachine, error) {
 			fmt.Print(err)
 			return nil, err
 		}
-		machine = append(machine, cardMachine)
+		machine = &cardMachine
 	}
 	if err := row.Err(); err != nil {
 		fmt.Print(err)
@@ -88,4 +86,33 @@ func (r *Repository) CpfExists(cpf string) (bool, error) {
 
 }
 
-//=================================================================== CARD MACHINE ===================================================================
+// =================================================================== CARD MACHINE ===================================================================
+// =================================================================== SALES TABLE =====================================================================
+// Creat the table sales for have a history
+// the id use for the idnetify a sale.
+func (r *Repository) CreateTableSale() (sql.Result, error) {
+	query := `CREATE TABLE IF NOT EXISTS sales(
+		id INTEGER PRIMARY KEY, 
+		time_sale VARCHAR(255)  NOT NULL,
+		time_aprove VARCHAR(255),
+		amount INTEGER NOT NULL,
+		status VARCHAR(255)  NOT NULL
+	)`
+	return r.db.Exec(query)
+
+}
+
+func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, value *brcode.DynamicQRParams) (sql.Result, int64, error) {
+	query := `INSERT INTO sales (time_sale, time_aprove, amount, status) VALUES( ?, ?, ?, ?)`
+	// Insert the values in the table CardMachine
+	result, err := r.db.Exec(query, time_sale, time_aprove, value.Amount, status) //insert the arguments in the quer and execute the query in the database
+	if err != nil {
+		return nil, 0, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, 0, err
+	}
+	return result, id, nil
+}

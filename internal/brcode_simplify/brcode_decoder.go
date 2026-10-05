@@ -56,12 +56,6 @@ func Decode(payload string) (*BRCodeData, error) {
 				switch child.Tag {
 				case SubTagGUI:
 					mai.GUI = child.Value
-				case SubTagPixKey:
-					mai.PixKey = child.Value
-				case SubTagInfoAdicional:
-					mai.InfoAdicional = child.Value
-				case SubTagFSS:
-					mai.FSS = child.Value
 				case SubTagURL:
 					mai.URL = child.Value
 				}
@@ -80,19 +74,6 @@ func Decode(payload string) (*BRCodeData, error) {
 			data.AdditionalData = ad
 		}
 
-		// Unreserved Templates (tags 80-99)
-		if isUnreservedTag(obj.Tag) && len(obj.Children) > 0 {
-			ut := UnreservedTemplate{Tag: obj.Tag}
-			for _, child := range obj.Children {
-				switch child.Tag {
-				case SubTagGUI:
-					ut.GUI = child.Value
-				case SubTagURL:
-					ut.URL = child.Value
-				}
-			}
-			data.UnreservedTemplates = append(data.UnreservedTemplates, ut)
-		}
 	}
 
 	return data, nil
@@ -213,13 +194,4 @@ func isMAITag(tag string) bool {
 	}
 	n := (tag[0]-'0')*10 + (tag[1] - '0')
 	return n >= 26 && n <= 51
-}
-
-// isUnreservedTag returns true if the tag is in the unreserved template range (80-99).
-func isUnreservedTag(tag string) bool {
-	if len(tag) != 2 {
-		return false
-	}
-	n := (tag[0]-'0')*10 + (tag[1] - '0')
-	return n >= 80 && n <= 99
 }

@@ -1,10 +1,12 @@
 package test_sql
 
 import (
+	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -44,6 +46,58 @@ func TestCreateTableOfCardMachine1(t *testing.T) {
 	}
 
 	fmt.Println("Table created successfully:", log)
+}
+
+func TestCreateTableSale(t *testing.T) {
+	// Call the DbConnection function to test the database connection
+	db, err, _ := repository.DbConnection()
+	if err != nil {
+		fmt.Println("Error in connection", err)
+		return
+	}
+
+	//Initialize the repository with dependency
+	repo := repository.NewRepository(db)
+
+	//Call the func for create the table
+	log, err := repo.CreateTableSale()
+	if err != nil {
+		fmt.Println("Error creating table:", err)
+		return
+	}
+
+	fmt.Println("Table created successfully:", log)
+}
+
+func TestInsertValueInTableSale(t *testing.T) {
+	//variables dependencys
+	time_sale := time.Now()
+	var time_approved *string
+	//initialize in pendent for test
+	status := model.StatusPending
+
+	//1000 == 10,10
+	amount := brcode.DynamicQRParams{
+		Amount: "1000",
+	}
+
+	// Call the DbConnection function to test the database connection
+	db, err, _ := repository.DbConnection()
+	if err != nil {
+		fmt.Println("Error in connection", err)
+		return
+	}
+
+	//Initialize the repository with dependency
+	repo := repository.NewRepository(db)
+
+	result, id, err := repo.InsertValueInTableSale(time_sale.String(), time_approved, status, &amount)
+
+	if err != nil {
+		fmt.Print(err)
+	}
+	fmt.Print(result)
+	fmt.Print(id)
 }
 
 func TestInsertValueInTableCardMachine1(t *testing.T) {

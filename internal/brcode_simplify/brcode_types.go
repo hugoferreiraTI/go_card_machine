@@ -1,13 +1,10 @@
 package brcode
 
 // PointOfInitiation defines the EMV Point of Initiation Method.
-// "11" = static (reusable), "12" = dynamic (single-use).
+// "12" identifies the dynamic QR flow supported by this package.
 type PointOfInitiation string
 
-const (
-	PointOfInitiationStatic  PointOfInitiation = "11"
-	PointOfInitiationDynamic PointOfInitiation = "12"
-)
+const PointOfInitiationDynamic PointOfInitiation = "12"
 
 // --- EMV Tag Constants ---
 
@@ -24,16 +21,12 @@ const (
 	TagPostalCode              = "61"
 	TagAdditionalDataField     = "62"
 	TagCRC                     = "63"
-	TagUnreservedTemplate80    = "80" // First unreserved template (used for recurrence)
 )
 
 // Subtags within Merchant Account Information (tag 26-51)
 const (
-	SubTagGUI           = "00"
-	SubTagPixKey        = "01"
-	SubTagInfoAdicional = "02"
-	SubTagFSS           = "03"
-	SubTagURL           = "25"
+	SubTagGUI = "00"
+	SubTagURL = "25"
 )
 
 // Subtags within Additional Data Field (tag 62)
@@ -54,27 +47,12 @@ const (
 // --- Field Length Constraints ---
 
 const (
-	MaxMerchantName        = 25
-	MaxMerchantCity        = 15
-	MaxPostalCode          = 8
-	MaxStaticTxID          = 25
-	MaxDynamicTxID         = 35
-	MaxURL                 = 77
-	MaxInfoAdicional       = 72
-	MaxMerchantAccountInfo = 99
+	MaxMerchantName = 25
+	MaxMerchantCity = 15
+	MaxPostalCode   = 8
+	MaxDynamicTxID  = 35 // Advisory limit; BuildDynamicQR does not enforce it.
+	MaxURL          = 77
 )
-
-// StaticQRParams contains parameters for generating a static BR Code QR.
-type StaticQRParams struct {
-	PixKey        string // Required: PIX key (chave)
-	MerchantName  string // Required: max 25 chars
-	MerchantCity  string // Required: max 15 chars
-	Amount        string // Optional: decimal string "123.45" (empty = open value)
-	TxID          string // Optional: max 25 chars (default "***")
-	InfoAdicional string // Optional: max 72 chars
-	PostalCode    string // Optional: max 8 chars (CEP)
-	FSS           string // Optional: Facilitador de Servico de Saque
-}
 
 // DynamicQRParams contains parameters for generating a dynamic BR Code QR.
 type DynamicQRParams struct {
@@ -84,24 +62,6 @@ type DynamicQRParams struct {
 	Amount       string // Optional: decimal string
 	TxID         string // Optional: default "***"
 	PostalCode   string // Optional: max 8 chars
-}
-
-// CompositeQRParams contains parameters for generating a composite BR Code QR.
-// Composite QR codes combine payment (tag 26) with recurrence (tag 80).
-type CompositeQRParams struct {
-	// Payment component (optional — omit for recurrence-only)
-	PaymentURL string // URL for dynamic payment in tag 26 (max 77 chars)
-	PixKey     string // PIX key for static payment in tag 26
-
-	// Recurrence component (required)
-	RecurrenceURL string // URL for recurrence payload in tag 80 (max 77 chars)
-
-	// Shared fields
-	MerchantName string // Required: max 25 chars
-	MerchantCity string // Required: max 15 chars
-	Amount       string // Optional
-	TxID         string // Optional
-	PostalCode   string // Optional
 }
 
 // BRCodeData represents a fully decoded BR Code payload.
@@ -114,32 +74,21 @@ type BRCodeData struct {
 	TransactionAmount      string
 	CountryCode            string
 	MerchantName           string
-	MerchantCity           string
+	MerchantCity           string	
 	PostalCode             string
 	AdditionalData         *AdditionalData
-	UnreservedTemplates    []UnreservedTemplate
 	CRC                    string
 }
 
 // MerchantAccountInfo contains the decoded tag 26 (or 27-51) template.
 type MerchantAccountInfo struct {
-	GUI           string // "br.gov.bcb.pix"
-	PixKey        string // Static QR: chave
-	InfoAdicional string // Static QR: info adicional
-	FSS           string // Facilitador de Servico de Saque
-	URL           string // Dynamic QR: payload URL
+	GUI string // "br.gov.bcb.pix"
+	URL string // Dynamic QR: payload URL
 }
 
 // AdditionalData contains the decoded tag 62 template.
 type AdditionalData struct {
 	ReferenceLabel string // tag 62.05: txid
-}
-
-// UnreservedTemplate contains a decoded unreserved template (tags 80-99).
-type UnreservedTemplate struct {
-	Tag string
-	GUI string // tag XX.00
-	URL string // tag XX.25
 }
 
 // ValidationError represents a BR Code validation issue.

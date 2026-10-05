@@ -10,14 +10,12 @@ import (
 
 // Open the connection to the database
 func DbConnection() (*sql.DB, error, string) {
-	fmt.Println("Passei aqui")
 	db, err := sql.Open("sqlite3", "./card_machine.db")
 	if err != nil {
 		fmt.Println("Passei aqui")
 		log.Fatal(err)
 		return nil, err, ""
 	}
-	fmt.Println("Passei aqui")
 	fmt.Println("Database connection established successfully.")
 
 	var sqliteVersion string
