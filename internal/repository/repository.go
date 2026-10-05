@@ -1,0 +1,91 @@
+package repository
+
+import (
+	"card_machine/internal/model"
+	"database/sql"
+	"errors"
+	"fmt"
+
+	_ "github.com/glebarez/go-sqlite"
+)
+
+type Repository struct {
+	db *sql.DB
+}
+
+func NewRepository(db *sql.DB) *Repository {
+	return &Repository{db: db}
+}
+
+// ===================================================================  ===================================================================
+// =================================================================== CARD MACHINE ===================================================================
+// =================================================================== CARD MACHINE ===================================================================
+// Create the table CardMachine (the table principal)
+// The fun Exec execute a query in engine the database and return a result and a error
+func (r *Repository) CreateTableOfCardMachine() (sql.Result, error) {
+	query := `CREATE TABLE IF NOT EXISTS bank_machine(
+		uuid TEXT PRIMARY KEY,
+		person_name_storage VARCHAR(255)  NOT NULL,
+		storage_name VARCHAR(255)  NOT NULL,
+		person_cpf VARCHAR(255)  NOT NULL,
+		city VARCHAR(255)  NOT NULL,
+		state VARCHAR(255)  NOT NULL,
+		serial_number VARCHAR(255) NOT NULL
+	)`
+	return r.db.Exec(query)
+}
+
+// / Insert a value in the table CardMachine
+func (r *Repository) InsertValueInCardMachine(cardMachine *model.CardMachine) (sql.Result, error) {
+	query := `INSERT INTO bank_machine (uuid, person_name_storage, storage_name, person_cpf, city, state, serial_number) VALUES( ?, ?, ?, ?, ?, ?, ?)`
+	// Insert the values in the table CardMachine
+	return r.db.Exec(query, cardMachine.UUID, cardMachine.PersonNameStorage, cardMachine.StorageName, cardMachine.PersonCpf, cardMachine.City, cardMachine.State, cardMachine.SerialNumber) //insert the arguments in the quer and execute the query in the database
+}
+
+// Get all values in the thable CardMachine
+func (r *Repository) GetAllValuesInCardMachine() ([]model.CardMachine, error) {
+	query := `SELECT * FROM bank_machine`
+	row, err := r.db.Query(query)
+	if err != nil {
+		fmt.Print(err)
+		return nil, err
+	}
+
+	defer row.Close() // Close the rows after processing to free up resources
+
+	machine := []model.CardMachine{}
+
+	for row.Next() {
+		var cardMachine model.CardMachine
+		err := row.Scan(&cardMachine.UUID, &cardMachine.PersonNameStorage, &cardMachine.StorageName, &cardMachine.PersonCpf, &cardMachine.City, &cardMachine.State, &cardMachine.SerialNumber)
+		if err != nil {
+			fmt.Print(err)
+			return nil, err
+		}
+		machine = append(machine, cardMachine)
+	}
+	if err := row.Err(); err != nil {
+		fmt.Print(err)
+		return nil, err
+	}
+
+	return machine, nil
+}
+
+func (r *Repository) CpfExists(cpf string) (bool, error) {
+	var count int
+
+	//verify if the cpf exist in the table bank_machine
+	query := `SELECT COUNT(1) FROM bank_machine WHERE person_cpf = ?`
+
+	//add the value in count
+	err := r.db.QueryRow(query, cpf).Scan(&count)
+	if err != nil {
+		return false, errors.New("error executing query: " + err.Error())
+	}
+
+	return count > 0, nil //if count is greater than 0, return true, else return false
+
+}
+
+//=================================================================== CARD MACHINE ===================================================================
