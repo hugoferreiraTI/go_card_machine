@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/skip2/go-qrcode"
 )
 
 type NewCardMachineCase struct {
@@ -44,46 +46,93 @@ func (a *NewCardMachineCase) InsertValueInCardMachine(cardMachine *model.CardMac
 // ============================================ SALES CASES =================================================================================
 func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 	merchant, err := a.repo.GetAllValuesInCardMachine()
-	urlExemplo := "//https.com.br/caminho/123"
+	//urlExemplo := "//https.com.br/caminho/123"
+	if err != nil {
+		fmt.Print("erro aqui")
+		return "", err
+	}
+
+	fmt.Print("chamei a func")
+
+	real, cents, err := a.breakTheAmount(amountValue)
 	if err != nil {
 		return "", err
 	}
+
+	id, err := a.InsertValueInTable(cents, real) //save separeted the cents and real
+	amountQrCode := fmt.Sprintf("%d.%02d", real, cents)
+
+	if err != nil {
+		return "", err
+	}
+
 	qrCode := brcode.DynamicQRParams{
 		MerchantName: merchant.PersonNameStorage,
 		MerchantCity: merchant.City,
-		Amount:       amountValue,
-		URL:          urlExemplo,
+		Amount:       amountQrCode,
 	}
+	url := fmt.Sprintf("https://pix.com.br/caminho/%d", id)
 
+	qrCode.URL = url
+
+	//genereate a qrcode in file.
 	payload, err := brcode.BuildDynamicQR(qrCode)
 
 	if err != nil {
 		return "", err
 	}
 
-	fmt.Print(payload)
-	return "", nil
+	qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
+
+	return "qrcocode sucess", nil
 }
 
 // insert value and return a ID for URL
-func (a *NewCardMachineCase) InsertValue(value *brcode.DynamicQRParams) (int, error) {
+func (a *NewCardMachineCase) InsertValueInTable(cents, real int64) (int64, error) {
 	timeSale := time.Now().Format(time.RFC3339)
 	status := model.StatusPending
 	var timeApproved *string
 
-	a.repo.InsertValueInTableSale(timeSale, timeApproved, status, value)
-	return 0, nil
-}
-
-// prepare to amount for save in databse (future)
-func (a *NewCardMachineCase) ConvertStringToIntForDatabase(amount string) (int64, error) {
-	val, err := strconv.ParseInt(amount, 10, 64)
+	_, id, err := a.repo.InsertValueInTableSale(timeSale, timeApproved, status, cents, real)
 
 	if err != nil {
 		return 0, err
 	}
 
-	return val, nil
+	return id, nil
+}
+
+func (a *NewCardMachineCase) breakTheAmount(amount string) (real, cents int64, err error) {
+	parts := strings.Split(amount, ".") //recive a string, and breaking in parts where have ","
+	var real_text string
+	var cents_text string
+
+	if len(parts) == 1 {
+		//dont have cents
+		real_text = parts[0]
+		cents_text = "00"
+	}
+
+	if len(parts) == 2 {
+		real_text = parts[0]
+		cents_text = parts[1]
+	}
+	if len(parts) >= 3 {
+		err = errors.New("invalid value")
+		return 0, 0, err
+	}
+
+	real_value, err := strconv.ParseInt(real_text, 10, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	cents_value, err := strconv.ParseInt(cents_text, 10, 64)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return real_value, cents_value, nil
 
 }
 

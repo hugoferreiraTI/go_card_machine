@@ -42,3 +42,21 @@ func (h *HandlerCase) InsertValueInCardMachine(c *gin.Context) {
 	})
 
 }
+
+func (h *HandlerCase) PostSales(c *gin.Context) {
+	var pixAmount model.Pix
+
+	if err := c.BindJSON(&pixAmount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
+		return
+	}
+
+	result, err := h.NewCardMachineCase.PostSale(pixAmount.AmountPix)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "result": result})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"sucess": result})
+}

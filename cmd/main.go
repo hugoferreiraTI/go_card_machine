@@ -29,7 +29,9 @@ func main() {
 
 	//create the table
 	authRepository.CreateTableOfCardMachine()
+	authRepository.CreateTableSale()
 
 	server.POST("/card_machine", authHandler.InsertValueInCardMachine) //initialize the card machine first.
+	server.POST("/Sale", authHandler.PostSales)
 	server.Run(":8080")
 }

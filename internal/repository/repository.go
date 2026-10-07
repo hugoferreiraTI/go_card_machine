@@ -1,7 +1,6 @@
 package repository
 
 import (
-	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/model"
 	"database/sql"
 	"errors"
@@ -96,16 +95,17 @@ func (r *Repository) CreateTableSale() (sql.Result, error) {
 		time_sale VARCHAR(255)  NOT NULL,
 		time_aprove VARCHAR(255),
 		amount INTEGER NOT NULL,
+		real INTEGER NOT NULL,
 		status VARCHAR(255)  NOT NULL
 	)`
 	return r.db.Exec(query)
 
 }
 
-func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, value *brcode.DynamicQRParams) (sql.Result, int64, error) {
-	query := `INSERT INTO sales (time_sale, time_aprove, amount, status) VALUES( ?, ?, ?, ?)`
+func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, cents int64, real int64) (sql.Result, int64, error) {
+	query := `INSERT INTO sales (time_sale, time_aprove, amount, real, status) VALUES( ?, ?, ?, ?, ?)`
 	// Insert the values in the table CardMachine
-	result, err := r.db.Exec(query, time_sale, time_aprove, value.Amount, status) //insert the arguments in the quer and execute the query in the database
+	result, err := r.db.Exec(query, time_sale, time_aprove, cents, real, status) //insert the arguments in the quer and execute the query in the database
 	if err != nil {
 		return nil, 0, err
 	}

@@ -1,7 +1,6 @@
 package test_sql
 
 import (
-	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"fmt"
@@ -73,13 +72,10 @@ func TestInsertValueInTableSale(t *testing.T) {
 	//variables dependencys
 	time_sale := time.Now()
 	var time_approved *string
+	var real int64
+	var cents int64
 	//initialize in pendent for test
 	status := model.StatusPending
-
-	//1000 == 10,10
-	amount := brcode.DynamicQRParams{
-		Amount: "1000",
-	}
 
 	// Call the DbConnection function to test the database connection
 	db, err, _ := repository.DbConnection()
@@ -88,10 +84,13 @@ func TestInsertValueInTableSale(t *testing.T) {
 		return
 	}
 
+	real = 100
+	cents = 50
+
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
 
-	result, id, err := repo.InsertValueInTableSale(time_sale.String(), time_approved, status, &amount)
+	result, id, err := repo.InsertValueInTableSale(time_sale.String(), time_approved, status, cents, real)
 
 	if err != nil {
 		fmt.Print(err)
