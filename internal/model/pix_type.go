@@ -5,6 +5,7 @@ type SaleStatus string
 const (
 	StatusPending  SaleStatus = "PENDING"
 	StatusApproved SaleStatus = "APPROVED"
+	StatusReproved SaleStatus = "REPROVED"
 )
 
 type Pix struct {

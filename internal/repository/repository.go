@@ -116,3 +116,51 @@ func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *strin
 	}
 	return result, id, nil
 }
+
+func (r *Repository) ValidatePendingSale(id int) (bool, model.SaleStatus, error) {
+	var id_sale int
+	var status model.SaleStatus
+
+	//verify if the ID exist in the table bank_machine
+	query := `SELECT id, status FROM sales WHERE id = ?`
+
+	//add the value in count
+	err := r.db.QueryRow(query, id).Scan(&id_sale, &status)
+	if err != nil {
+		return false, status, errors.New("error executing query: " + err.Error())
+	}
+
+	//if the status dont is "pendent", i mean what this sale has already expired
+	if status != model.StatusPending {
+		return false, status, nil
+	}
+
+	return id_sale > 0, status, nil //if count is greater than 0, return true, else return false
+
+}
+
+func (r *Repository) RecoverValues(id int) (int, int, error) {
+	var real int
+	var amount int
+
+	//verify if the ID exist in the table bank_machine
+	query := `SELECT amount, real FROM sales WHERE id = ?`
+
+	err := r.db.QueryRow(query, id).Scan(&real, &amount)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return real, amount, nil
+}
+
+func (r *Repository) PutValueStatus(id int, status model.SaleStatus) (sql.Result, error) {
+	query := `UPDATE sales SET status = ?  WHERE id = ?`
+	result, err := r.db.Exec(query, status, id)
+
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
