@@ -16,12 +16,24 @@ import (
 )
 
 type NewCardMachineCase struct {
-	repo *repository.Repository
+	repo        *repository.Repository
+	paymentCase *NewPaymenteCase
+	PaymentChan chan PaymentAttempt
 }
 
-func NewNewCardMachineCase(repo *repository.Repository) *NewCardMachineCase {
+type PaymentAttempt struct {
+	Pix      model.Pix
+	Response chan model.SaleStatus
+}
+
+func NewNewCardMachineCase(
+	repo *repository.Repository,
+	paymentCase *NewPaymenteCase,
+) *NewCardMachineCase {
 	return &NewCardMachineCase{
-		repo: repo,
+		repo:        repo,
+		paymentCase: paymentCase,
+		PaymentChan: make(chan PaymentAttempt),
 	}
 }
 
@@ -45,6 +57,7 @@ func (a *NewCardMachineCase) InsertValueInCardMachine(cardMachine *model.CardMac
 
 // ============================================ SALES CASES =================================================================================
 func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
+	paymentChan := a.PaymentChan //creat a arguments nil for the function
 	merchant, err := a.repo.GetAllValuesInCardMachine()
 	//urlExemplo := "//https.com.br/caminho/123"
 	if err != nil {
@@ -83,6 +96,8 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 	}
 
 	qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
+
+	go a.paymentCase.WaitPaytament(paymentChan, id)
 
 	return "qrcocode sucess", nil
 }

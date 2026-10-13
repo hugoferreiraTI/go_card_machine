@@ -84,7 +84,7 @@ func TestInsertValueInTableSale(t *testing.T) {
 		return
 	}
 
-	real = 100
+	real = 500
 	cents = 50
 
 	//Initialize the repository with dependency

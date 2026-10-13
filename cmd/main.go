@@ -21,8 +21,9 @@ func main() {
 
 	//injection of dependencies
 	authRepository := repository.NewRepository(dbConnection)
-	authUseCase := usecases.NewNewCardMachineCase(authRepository)
-	authHandler := handler.NewHandlerCase(authUseCase)
+	authPayment := usecases.NewPaymentCase(authRepository)
+	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment)
+	authHandler := handler.NewHandlerCase(authUseCase, authPayment)
 
 	//initialize the Gin router
 	server := gin.Default()
@@ -33,5 +34,6 @@ func main() {
 
 	server.POST("/card_machine", authHandler.InsertValueInCardMachine) //initialize the card machine first.
 	server.POST("/Sale", authHandler.PostSales)
+	server.POST("/Pay", authHandler.Payment)
 	server.Run(":8080")
 }

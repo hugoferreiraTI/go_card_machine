@@ -117,7 +117,7 @@ func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *strin
 	return result, id, nil
 }
 
-func (r *Repository) ValidatePendingSale(id int) (bool, model.SaleStatus, error) {
+func (r *Repository) ValidatePendingSale(id int64) (bool, model.SaleStatus, error) {
 	var id_sale int
 	var status model.SaleStatus
 
@@ -139,7 +139,7 @@ func (r *Repository) ValidatePendingSale(id int) (bool, model.SaleStatus, error)
 
 }
 
-func (r *Repository) RecoverValues(id int) (int, int, error) {
+func (r *Repository) RecoverValues(id int64) (int, int, error) {
 	var real int
 	var amount int
 
@@ -154,7 +154,7 @@ func (r *Repository) RecoverValues(id int) (int, int, error) {
 	return real, amount, nil
 }
 
-func (r *Repository) PutValueStatus(id int, status model.SaleStatus) (sql.Result, error) {
+func (r *Repository) PutValueStatus(id int64, status model.SaleStatus) (sql.Result, error) {
 	query := `UPDATE sales SET status = ?  WHERE id = ?`
 	result, err := r.db.Exec(query, status, id)
 

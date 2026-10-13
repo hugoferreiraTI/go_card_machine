@@ -4,17 +4,23 @@ import (
 	"card_machine/internal/model"
 	usecases "card_machine/internal/useCases"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 type HandlerCase struct {
 	NewCardMachineCase *usecases.NewCardMachineCase
+	NewPaymentCase     *usecases.NewPaymenteCase
 }
 
-func NewHandlerCase(repo *usecases.NewCardMachineCase) *HandlerCase {
+func NewHandlerCase(
+	cardMachineCase *usecases.NewCardMachineCase,
+	paymentCase *usecases.NewPaymenteCase,
+) *HandlerCase {
 	return &HandlerCase{
-		NewCardMachineCase: repo,
+		NewCardMachineCase: cardMachineCase,
+		NewPaymentCase:     paymentCase,
 	}
 }
 
@@ -59,4 +65,42 @@ func (h *HandlerCase) PostSales(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"sucess": result})
+}
+
+func (h *HandlerCase) Payment(c *gin.Context) {
+	var pixAmount model.Pix                     //json recive
+	responseChan := make(chan model.SaleStatus) //create a channel
+
+	if err := c.BindJSON(&pixAmount); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
+		return
+	}
+
+	attempt := usecases.PaymentAttempt{
+		Pix:      pixAmount,
+		Response: responseChan,
+	} //created the struc
+
+	//use a case for "case" a buffer are void, evited loops and loadings infinite
+	select {
+	case h.NewCardMachineCase.PaymentChan <- attempt:
+		//value envied for PaymentChan
+	case <-time.After(1 * time.Second):
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "The time for payment expired or sale dont existed",
+		})
+		return
+	}
+
+	status := <-attempt.Response
+
+	if status == model.StatusApproved {
+		c.JSON(http.StatusOK, gin.H{
+			"status": status,
+		})
+		return
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"status": status,
+	})
 }
