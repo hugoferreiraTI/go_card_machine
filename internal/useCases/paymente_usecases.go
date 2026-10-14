@@ -17,37 +17,41 @@ func NewPaymentCase(repo *repository.Repository) *NewPaymenteCase {
 	}
 }
 
-func (p *NewPaymenteCase) Payment(value string, id int64) (model.SaleStatus, error) {
+func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error) {
 	result, statusInDb, err := p.repo.ValidatePendingSale(id)
 
 	if err != nil {
-		return model.StatusReproved, err
+		return model.StatusExpired, err
 	}
 
 	if statusInDb != model.StatusPending {
-		return model.StatusReproved, nil
+		return model.StatusExpired, nil
 	}
 
 	if !result {
-		return model.StatusReproved, err
+		return model.StatusExpired, err
 	}
 
-	amount, real, err := p.repo.RecoverValues(id)
+	real, cents, err := p.repo.RecoverValues(id)
 	if err != nil {
-		return model.StatusReproved, err
+		return model.StatusReproved, nil
 	}
 
-	value_db := fmt.Sprintf("%d.%02d", real, amount)
+	value_db := fmt.Sprintf("%d.%02d", real, cents)
 
 	if value_db != value {
 		return model.StatusReproved, nil
 	}
 
-	p.repo.PutValueStatus(id, model.StatusApproved)
+	_, err = p.repo.PutValueStatus(id, model.StatusApproved)
+	if err != nil {
+		return model.StatusExpired, err
+	}
+
 	return model.StatusApproved, nil
 }
 
-func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id int64) (model.SaleStatus, error) {
+func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id int) (model.SaleStatus, error) {
 	//recive a timer in minutes
 	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
@@ -71,8 +75,11 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 			}
 			//if the time concluide are stop the loop (expired)
 		case <-timer.C: //this case, the C its is a CHANNEL
-			p.repo.PutValueStatus(id, model.StatusReproved)
-			return model.StatusReproved, nil
+			_, err := p.repo.PutValueStatus(id, model.StatusExpired)
+			if err != nil {
+				return model.StatusExpired, err
+			}
+			return model.StatusExpired, nil
 		}
 	}
 }

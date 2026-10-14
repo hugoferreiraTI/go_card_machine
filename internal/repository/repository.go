@@ -94,7 +94,7 @@ func (r *Repository) CreateTableSale() (sql.Result, error) {
 		id INTEGER PRIMARY KEY, 
 		time_sale VARCHAR(255)  NOT NULL,
 		time_aprove VARCHAR(255),
-		amount INTEGER NOT NULL,
+		cents INTEGER NOT NULL,
 		real INTEGER NOT NULL,
 		status VARCHAR(255)  NOT NULL
 	)`
@@ -102,22 +102,23 @@ func (r *Repository) CreateTableSale() (sql.Result, error) {
 
 }
 
-func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, cents int64, real int64) (sql.Result, int64, error) {
-	query := `INSERT INTO sales (time_sale, time_aprove, amount, real, status) VALUES( ?, ?, ?, ?, ?)`
+func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, cents int64, real int64) (sql.Result, int, error) {
+	query := `INSERT INTO sales (time_sale, time_aprove, cents, real, status) VALUES( ?, ?, ?, ?, ?)`
 	// Insert the values in the table CardMachine
 	result, err := r.db.Exec(query, time_sale, time_aprove, cents, real, status) //insert the arguments in the quer and execute the query in the database
 	if err != nil {
 		return nil, 0, err
 	}
 
-	id, err := result.LastInsertId()
+	id64, err := result.LastInsertId()
+	id := int(id64)
 	if err != nil {
 		return nil, 0, err
 	}
 	return result, id, nil
 }
 
-func (r *Repository) ValidatePendingSale(id int64) (bool, model.SaleStatus, error) {
+func (r *Repository) ValidatePendingSale(id int) (bool, model.SaleStatus, error) {
 	var id_sale int
 	var status model.SaleStatus
 
@@ -139,28 +140,43 @@ func (r *Repository) ValidatePendingSale(id int64) (bool, model.SaleStatus, erro
 
 }
 
-func (r *Repository) RecoverValues(id int64) (int, int, error) {
-	var real int
-	var amount int
+func (r *Repository) RecoverValues(id int) (int64, int64, error) {
+	var real int64
+	var cents int64
 
 	//verify if the ID exist in the table bank_machine
-	query := `SELECT amount, real FROM sales WHERE id = ?`
+	query := `SELECT cents, real FROM sales WHERE id = ?`
 
-	err := r.db.QueryRow(query, id).Scan(&real, &amount)
+	err := r.db.QueryRow(query, id).Scan(&cents, &real)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	return real, amount, nil
+	return real, cents, nil
 }
 
-func (r *Repository) PutValueStatus(id int64, status model.SaleStatus) (sql.Result, error) {
+func (r *Repository) VerifyTheStatus() (model.SaleStatus, int, error) {
+	var id int
+	var status model.SaleStatus
+	query := `SELECT id, status FROM sales ORDER BY id DESC LIMIT 1;`
+	err := r.db.QueryRow(query).Scan(&id, &status)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, nil
+	}
+
+	if err != nil {
+		return status, 0, err
+	}
+
+	return status, id, err
+}
+
+func (r *Repository) PutValueStatus(id int, status model.SaleStatus) (sql.Result, error) {
 	query := `UPDATE sales SET status = ?  WHERE id = ?`
 	result, err := r.db.Exec(query, status, id)
-
 	if err != nil {
 		return result, err
 	}
-
 	return result, nil
 }

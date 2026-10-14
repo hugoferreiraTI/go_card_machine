@@ -57,7 +57,16 @@ func (a *NewCardMachineCase) InsertValueInCardMachine(cardMachine *model.CardMac
 
 // ============================================ SALES CASES =================================================================================
 func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
-	paymentChan := a.PaymentChan //creat a arguments nil for the function
+	status, _, err := a.repo.VerifyTheStatus()
+
+	if err != nil {
+		return "", err
+	}
+
+	if status == model.StatusPending {
+		return "", errors.New("The last sale is active.")
+	}
+
 	merchant, err := a.repo.GetAllValuesInCardMachine()
 	//urlExemplo := "//https.com.br/caminho/123"
 	if err != nil {
@@ -73,11 +82,12 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 	}
 
 	id, err := a.InsertValueInTable(cents, real) //save separeted the cents and real
-	amountQrCode := fmt.Sprintf("%d.%02d", real, cents)
 
 	if err != nil {
 		return "", err
 	}
+
+	amountQrCode := fmt.Sprintf("%d.%02d", real, cents)
 
 	qrCode := brcode.DynamicQRParams{
 		MerchantName: merchant.PersonNameStorage,
@@ -95,15 +105,18 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 		return "", err
 	}
 
-	qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
-
-	go a.paymentCase.WaitPaytament(paymentChan, id)
+	err = qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
+	if err != nil {
+		return "", err
+	}
+	//							  use the channel of struct.
+	go a.paymentCase.WaitPaytament(a.PaymentChan, id)
 
 	return "qrcocode sucess", nil
 }
 
 // insert value and return a ID for URL
-func (a *NewCardMachineCase) InsertValueInTable(cents, real int64) (int64, error) {
+func (a *NewCardMachineCase) InsertValueInTable(cents, real int64) (int, error) {
 	timeSale := time.Now().Format(time.RFC3339)
 	status := model.StatusPending
 	var timeApproved *string
@@ -136,6 +149,14 @@ func (a *NewCardMachineCase) breakTheAmount(amount string) (real, cents int64, e
 		err = errors.New("invalid value")
 		return 0, 0, err
 	}
+
+	if len(cents_text) == 1 {
+		cents_text += "0"
+	} //convert one decimal digit to cents. Example: "10.5" -> "10.50"
+
+	if len(cents_text) > 2 {
+		return 0, 0, errors.New("invalid cents")
+	} //reject values with more than two decimal digits. Example: "10.500"
 
 	real_value, err := strconv.ParseInt(real_text, 10, 64)
 	if err != nil {

@@ -11,16 +11,13 @@ import (
 
 type HandlerCase struct {
 	NewCardMachineCase *usecases.NewCardMachineCase
-	NewPaymentCase     *usecases.NewPaymenteCase
 }
 
 func NewHandlerCase(
 	cardMachineCase *usecases.NewCardMachineCase,
-	paymentCase *usecases.NewPaymenteCase,
 ) *HandlerCase {
 	return &HandlerCase{
 		NewCardMachineCase: cardMachineCase,
-		NewPaymentCase:     paymentCase,
 	}
 }
 
@@ -81,7 +78,7 @@ func (h *HandlerCase) Payment(c *gin.Context) {
 		Response: responseChan,
 	} //created the struc
 
-	//use a case for "case" a buffer are void, evited loops and loadings infinite
+	//Prevent the request from blocking if no payment listener is active.
 	select {
 	case h.NewCardMachineCase.PaymentChan <- attempt:
 		//value envied for PaymentChan

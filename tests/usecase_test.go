@@ -10,7 +10,7 @@ import (
 
 func TestPutStatus(t *testing.T) {
 	value := "100.50"
-	var id int64
+	var id int
 	id = 1
 
 	// Call the DbConnection function to test the database connection
@@ -48,7 +48,7 @@ func TestPayment(t *testing.T) {
 			},
 		}
 	}()
-	var id int64
+	var id int
 	id = 4
 
 	// Call the DbConnection function to test the database connection

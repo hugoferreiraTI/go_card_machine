@@ -23,7 +23,7 @@ func main() {
 	authRepository := repository.NewRepository(dbConnection)
 	authPayment := usecases.NewPaymentCase(authRepository)
 	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment)
-	authHandler := handler.NewHandlerCase(authUseCase, authPayment)
+	authHandler := handler.NewHandlerCase(authUseCase)
 
 	//initialize the Gin router
 	server := gin.Default()

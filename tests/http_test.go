@@ -26,7 +26,7 @@ func TestHttpInsertValue(t *testing.T) {
 	repo := repository.NewRepository(db)
 	paymentCase := usecases.NewPaymentCase(repo)
 	authCase := usecases.NewNewCardMachineCase(repo, paymentCase)
-	handlerCase := handler.NewHandlerCase(authCase, paymentCase)
+	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()
 	router.POST("/card_machine", handlerCase.InsertValueInCardMachine)
@@ -76,7 +76,7 @@ func TestHttPostSale(t *testing.T) {
 	repo := repository.NewRepository(db)
 	paymentCase := usecases.NewPaymentCase(repo)
 	authCase := usecases.NewNewCardMachineCase(repo, paymentCase)
-	handlerCase := handler.NewHandlerCase(authCase, paymentCase)
+	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()
 	router.POST("/postSales", handlerCase.PostSales)
