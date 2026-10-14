@@ -63,6 +63,7 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 			status, err := p.Payment(attempt.Pix.AmountPix, id)
 			if err != nil {
 				fmt.Print("pagamento reprovado")
+				attempt.Response <- status
 				return status, err
 			}
 
@@ -77,6 +78,7 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 		case <-timer.C: //this case, the C its is a CHANNEL
 			_, err := p.repo.PutValueStatus(id, model.StatusExpired)
 			if err != nil {
+
 				return model.StatusExpired, err
 			}
 			return model.StatusExpired, nil
