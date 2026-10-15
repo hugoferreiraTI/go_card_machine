@@ -3,13 +3,16 @@ package test_sql
 import (
 	"bytes"
 	"card_machine/internal/handler"
+	"card_machine/internal/kafka_config"
 	"card_machine/internal/repository"
 	usecases "card_machine/internal/useCases"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,10 +25,22 @@ func TestHttpInsertValue(t *testing.T) {
 		return
 	}
 
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
+
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
 	paymentCase := usecases.NewPaymentCase(repo)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase)
+	kafkaCase := kafka_config.NewKafkaCaseDependency(produce)
+	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
 	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()
@@ -72,10 +87,22 @@ func TestHttPostSale(t *testing.T) {
 		return
 	}
 
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
+
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
 	paymentCase := usecases.NewPaymentCase(repo)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase)
+	kafkaCase := kafka_config.NewKafkaCaseDependency(produce)
+	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
 	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()

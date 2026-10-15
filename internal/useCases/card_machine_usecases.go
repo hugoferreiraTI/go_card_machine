@@ -2,9 +2,11 @@ package usecases
 
 import (
 	brcode "card_machine/internal/brcode_simplify"
+	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -18,6 +20,7 @@ import (
 type NewCardMachineCase struct {
 	repo        *repository.Repository
 	paymentCase *NewPaymenteCase
+	kafkaCase   *kafka_config.NewKafkaCase
 	PaymentChan chan PaymentAttempt
 }
 
@@ -29,10 +32,12 @@ type PaymentAttempt struct {
 func NewNewCardMachineCase(
 	repo *repository.Repository,
 	paymentCase *NewPaymenteCase,
+	kafkaCase *kafka_config.NewKafkaCase,
 ) *NewCardMachineCase {
 	return &NewCardMachineCase{
 		repo:        repo,
 		paymentCase: paymentCase,
+		kafkaCase:   kafkaCase,
 		PaymentChan: make(chan PaymentAttempt),
 	}
 }
@@ -109,6 +114,18 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	event := model.PaymentKafka{
+		SaleId: id,
+		Value:  amountQrCode,
+		Status: model.StatusPending,
+	}
+
+	data, err := json.Marshal(&event) //convert the PaymentKafka for json data and after convert a bytes type.
+	if err != nil {
+		return "", err
+	}
+
+	a.kafkaCase.ProducerGo(data)
 	//							  use the channel of struct.
 	go a.paymentCase.WaitPaytament(a.PaymentChan, id)
 
