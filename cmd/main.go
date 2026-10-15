@@ -2,6 +2,7 @@ package main
 
 import (
 	"card_machine/internal/handler"
+	"card_machine/internal/kafka_config"
 	"card_machine/internal/repository"
 	usecases "card_machine/internal/useCases"
 	"fmt"
@@ -19,10 +20,13 @@ func main() {
 	}
 	defer dbConnection.Close()
 
+	produce, _ := kafka_config.NewKafkaProducer()
+	kafkaCase := kafka_config.NewKafkaCaseDependency(produce)
+
 	//injection of dependencies
 	authRepository := repository.NewRepository(dbConnection)
 	authPayment := usecases.NewPaymentCase(authRepository)
-	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment)
+	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment, kafkaCase)
 	authHandler := handler.NewHandlerCase(authUseCase)
 
 	//initialize the Gin router

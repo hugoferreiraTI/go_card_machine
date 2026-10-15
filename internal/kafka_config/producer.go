@@ -42,7 +42,7 @@ func (k *NewKafkaCase) ProducerGo([]byte) {
 	}, nil)
 }
 
-func (k *NewKafkaCase) NewKafkaProducer() {
+func NewKafkaProducer() (*kafka.Producer, error) {
 	produce, err := kafka.NewProducer(&kafka.ConfigMap{
 		// User-specific properties that you must set
 		"bootstrap.servers": "localhost:9092", //run in docker local
@@ -53,6 +53,6 @@ func (k *NewKafkaCase) NewKafkaProducer() {
 		fmt.Printf("Failed to create producer: %s", err)
 		os.Exit(1)
 	}
-
 	NewKafkaCaseDependency(produce)
+	return produce, nil
 }
