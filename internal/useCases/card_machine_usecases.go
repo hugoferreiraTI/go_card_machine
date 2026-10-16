@@ -6,7 +6,6 @@ import (
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -20,7 +19,7 @@ import (
 type NewCardMachineCase struct {
 	repo        *repository.Repository
 	paymentCase *NewPaymenteCase
-	kafkaCase   *kafka_config.NewKafkaCase
+	kafkaCase   *kafka_config.NewProducerCase
 	PaymentChan chan PaymentAttempt
 }
 
@@ -32,7 +31,7 @@ type PaymentAttempt struct {
 func NewNewCardMachineCase(
 	repo *repository.Repository,
 	paymentCase *NewPaymenteCase,
-	kafkaCase *kafka_config.NewKafkaCase,
+	kafkaCase *kafka_config.NewProducerCase,
 ) *NewCardMachineCase {
 	return &NewCardMachineCase{
 		repo:        repo,
@@ -120,12 +119,7 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 		Status: model.StatusPending,
 	}
 
-	data, err := json.Marshal(&event) //convert the PaymentKafka for json data and after convert a bytes type.
-	if err != nil {
-		return "", err
-	}
-
-	a.kafkaCase.ProducerGo(data)
+	a.kafkaCase.ProducerGo(event)
 	//							  use the channel of struct.
 	go a.paymentCase.WaitPaytament(a.PaymentChan, id)
 

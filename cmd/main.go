@@ -20,13 +20,24 @@ func main() {
 	}
 	defer dbConnection.Close()
 
-	produce, _ := kafka_config.NewKafkaProducer()
-	kafkaCase := kafka_config.NewKafkaCaseDependency(produce)
+	produce, _ := kafka_config.NewKafkaProducer() //initializer the producer
+
+	consumer, err := kafka_config.NewKafkaConsumer()
+
+	if err != nil {
+		panic(err)
+	} //initialize the consumer kafka
+
+	consumerCase := kafka_config.NewConsumerDependency(consumer)
+
+	go consumerCase.ConsumerGo()
+
+	kafkaProduceCase := kafka_config.NewProducerCaseDependency(produce)
 
 	//injection of dependencies
 	authRepository := repository.NewRepository(dbConnection)
-	authPayment := usecases.NewPaymentCase(authRepository)
-	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment, kafkaCase)
+	authPayment := usecases.NewPaymentCase(authRepository, kafkaProduceCase)
+	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment, kafkaProduceCase)
 	authHandler := handler.NewHandlerCase(authUseCase)
 
 	//initialize the Gin router

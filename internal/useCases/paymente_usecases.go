@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"fmt"
@@ -8,12 +9,14 @@ import (
 )
 
 type NewPaymenteCase struct {
-	repo *repository.Repository
+	repo      *repository.Repository
+	kafkaCase *kafka_config.NewProducerCase
 }
 
-func NewPaymentCase(repo *repository.Repository) *NewPaymenteCase {
+func NewPaymentCase(repo *repository.Repository, kafkaCase *kafka_config.NewProducerCase) *NewPaymenteCase {
 	return &NewPaymenteCase{
-		repo: repo,
+		repo:      repo,
+		kafkaCase: kafkaCase,
 	}
 }
 
@@ -40,6 +43,13 @@ func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error
 	value_db := fmt.Sprintf("%d.%02d", real, cents)
 
 	if value_db != value {
+		event := model.PaymentKafka{
+			SaleId: id,
+			Value:  value_db,
+			Status: model.StatusReproved,
+		}
+
+		p.kafkaCase.ProducerGo(event)
 		return model.StatusReproved, nil
 	}
 
@@ -47,6 +57,14 @@ func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error
 	if err != nil {
 		return model.StatusExpired, err
 	}
+
+	event := model.PaymentKafka{
+		SaleId: id,
+		Value:  value_db,
+		Status: model.StatusApproved,
+	}
+
+	p.kafkaCase.ProducerGo(event)
 
 	return model.StatusApproved, nil
 }

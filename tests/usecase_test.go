@@ -1,11 +1,16 @@
 package test_sql
 
 import (
+	"card_machine/internal/handler"
+	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	usecases "card_machine/internal/useCases"
 	"fmt"
+	"os"
 	"testing"
+
+	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
 func TestPutStatus(t *testing.T) {
@@ -20,12 +25,25 @@ func TestPutStatus(t *testing.T) {
 		t.Fatal(err)
 		return
 	}
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
 
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
-	Paycase := usecases.NewPaymentCase(repo)
+	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
+	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
+	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	_ = handler.NewHandlerCase(authCase)
 
-	status, err := Paycase.Payment(value, id)
+	status, err := paymentCase.Payment(value, id)
 
 	if err != nil {
 		fmt.Print(status)
@@ -59,11 +77,25 @@ func TestPayment(t *testing.T) {
 		return
 	}
 
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
+
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
-	paycase := usecases.NewPaymentCase(repo)
+	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
+	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
+	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	_ = handler.NewHandlerCase(authCase)
 
-	status, err := paycase.WaitPaytament(amount, id)
+	status, err := paymentCase.WaitPaytament(amount, id)
 
 	if err != nil {
 		fmt.Print("paymente repproved")

@@ -1,23 +1,26 @@
 package kafka_config
 
 import (
+	"card_machine/internal/model"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
-type NewKafkaCase struct {
+type NewProducerCase struct {
 	Producer *kafka.Producer
 }
 
-func NewKafkaCaseDependency(producer *kafka.Producer) *NewKafkaCase {
-	return &NewKafkaCase{
+func NewProducerCaseDependency(producer *kafka.Producer) *NewProducerCase {
+	return &NewProducerCase{
 		Producer: producer,
 	}
 }
 
-func (k *NewKafkaCase) ProducerGo([]byte) {
+func (k *NewProducerCase) ProducerGo(event model.PaymentKafka) error {
 	//goroutine to handle message delivery reports and possibbly other event types
 	go func() {
 		for e := range k.Producer.Events() {
@@ -31,15 +34,22 @@ func (k *NewKafkaCase) ProducerGo([]byte) {
 			}
 		}
 	}()
-	topic := "purchases"
+	topic := "sale"
 
-	key := ""
-	data := ""
+	key := strconv.Itoa(event.SaleId)
+
+	data, err := json.Marshal(event) //converte the JSON in byte;
+	if err != nil {
+		return err
+	}
+
 	k.Producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 		Key:            []byte(key),
 		Value:          []byte(data),
 	}, nil)
+
+	return nil
 }
 
 func NewKafkaProducer() (*kafka.Producer, error) {
@@ -53,6 +63,6 @@ func NewKafkaProducer() (*kafka.Producer, error) {
 		fmt.Printf("Failed to create producer: %s", err)
 		os.Exit(1)
 	}
-	NewKafkaCaseDependency(produce)
+	NewProducerCaseDependency(produce)
 	return produce, nil
 }
