@@ -14,7 +14,12 @@ import (
 )
 
 func TestPutStatus(t *testing.T) {
-	value := "100.50"
+	value := model.Pix{
+		AmountPix: "100.10",
+		Cpf:       "12345678912",
+		Name:      "diego",
+		Bank:      "nubank",
+	}
 	var id int
 	id = 1
 
@@ -40,7 +45,7 @@ func TestPutStatus(t *testing.T) {
 	repo := repository.NewRepository(db)
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
 	_ = handler.NewHandlerCase(authCase)
 
 	status, err := paymentCase.Payment(value, id)
@@ -59,15 +64,20 @@ func TestPutStatus(t *testing.T) {
 
 func TestPayment(t *testing.T) {
 	amount := make(chan usecases.PaymentAttempt)
+	responseChan := make(chan model.SaleStatus)
+
 	go func() {
 		amount <- usecases.PaymentAttempt{
 			Pix: model.Pix{
 				AmountPix: "200.00",
+				Cpf:       "12345678912",
+				Name:      "Hugo",
+				Bank:      "nubank",
 			},
+			Response: responseChan,
 		}
 	}()
-	var id int
-	id = 4
+	id := 4
 
 	// Call the DbConnection function to test the database connection
 	db, err, _ := repository.DbConnection()
@@ -92,7 +102,7 @@ func TestPayment(t *testing.T) {
 	repo := repository.NewRepository(db)
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
 	_ = handler.NewHandlerCase(authCase)
 
 	status, err := paymentCase.WaitPaytament(amount, id)

@@ -47,14 +47,14 @@ func (h *HandlerCase) InsertValueInCardMachine(c *gin.Context) {
 }
 
 func (h *HandlerCase) PostSales(c *gin.Context) {
-	var pixAmount model.Pix
+	var pixSale model.PixSale
 
-	if err := c.BindJSON(&pixAmount); err != nil {
+	if err := c.BindJSON(&pixSale); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
 		return
 	}
 
-	result, err := h.NewCardMachineCase.PostSale(pixAmount.AmountPix)
+	result, err := h.NewCardMachineCase.PostSale(pixSale)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "result": result})
@@ -65,18 +65,23 @@ func (h *HandlerCase) PostSales(c *gin.Context) {
 }
 
 func (h *HandlerCase) Payment(c *gin.Context) {
-	var pixAmount model.Pix                     //json recive
+	var pix model.Pix                           //json recive
 	responseChan := make(chan model.SaleStatus) //create a channel
 
-	if err := c.BindJSON(&pixAmount); err != nil {
+	if err := c.BindJSON(&pix); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
 		return
 	}
 
 	attempt := usecases.PaymentAttempt{
-		Pix:      pixAmount,
+		Pix: model.Pix{
+			AmountPix: pix.AmountPix,
+			Name:      pix.Name,
+			Cpf:       pix.Cpf,
+			Bank:      pix.Bank,
+		},
 		Response: responseChan,
-	} //created the struc
+	}
 
 	//Prevent the request from blocking if no payment listener is active.
 	select {

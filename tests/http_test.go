@@ -40,7 +40,7 @@ func TestHttpInsertValue(t *testing.T) {
 	repo := repository.NewRepository(db)
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
 	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()
@@ -102,7 +102,7 @@ func TestHttPostSale(t *testing.T) {
 	repo := repository.NewRepository(db)
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
-	authCase := usecases.NewNewCardMachineCase(repo, paymentCase, kafkaCase)
+	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
 	handlerCase := handler.NewHandlerCase(authCase)
 	// Create the route
 	router := gin.Default()

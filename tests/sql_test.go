@@ -112,6 +112,7 @@ func TestInsertValueInTableCardMachine1(t *testing.T) {
 
 	testValue := model.CardMachine{
 		UUID:              uuid.New().String(),
+		BankInstituition:  "Nubank",
 		PersonNameStorage: "Test Machine TESTANDO",
 		StorageName:       "Test Storage",
 		PersonCpf:         "123.456.789-00",

@@ -1,0 +1,24 @@
+--------------------------------
+        COMPROVANTE PIX
+           APROVADO
+--------------------------------
+
+Valor: R$ 10.50
+Data: 2026-10-18T00:08:25-03:00
+
+ID da venda: 1
+Status: APPROVED
+
+PAGADOR
+Nome: Hugo Ferreira
+CPF: 12345678901
+Instituição: Nubank
+
+RECEBEDOR
+Nome: Hugo Ferreira
+CPF/CNPJ: 12345678901
+Instituição: nubank
+
+--------------------------------
+Pagamento realizado via Pix
+--------------------------------

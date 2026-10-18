@@ -37,7 +37,7 @@ func main() {
 	//injection of dependencies
 	authRepository := repository.NewRepository(dbConnection)
 	authPayment := usecases.NewPaymentCase(authRepository, kafkaProduceCase)
-	authUseCase := usecases.NewNewCardMachineCase(authRepository, authPayment, kafkaProduceCase)
+	authUseCase := usecases.NewCardMachineCaseDependency(authRepository, authPayment, kafkaProduceCase)
 	authHandler := handler.NewHandlerCase(authUseCase)
 
 	//initialize the Gin router

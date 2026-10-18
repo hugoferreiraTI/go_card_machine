@@ -28,7 +28,7 @@ type PaymentAttempt struct {
 	Response chan model.SaleStatus
 }
 
-func NewNewCardMachineCase(
+func NewCardMachineCaseDependency(
 	repo *repository.Repository,
 	paymentCase *NewPaymenteCase,
 	kafkaCase *kafka_config.NewProducerCase,
@@ -60,7 +60,7 @@ func (a *NewCardMachineCase) InsertValueInCardMachine(cardMachine *model.CardMac
 }
 
 // ============================================ SALES CASES =================================================================================
-func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
+func (a *NewCardMachineCase) PostSale(pix model.PixSale) (string, error) {
 	status, _, err := a.repo.VerifyTheStatus()
 
 	if err != nil {
@@ -74,13 +74,12 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 	merchant, err := a.repo.GetAllValuesInCardMachine()
 	//urlExemplo := "//https.com.br/caminho/123"
 	if err != nil {
-		fmt.Print("erro aqui")
 		return "", err
 	}
 
 	fmt.Print("chamei a func")
 
-	real, cents, err := a.breakTheAmount(amountValue)
+	real, cents, err := a.breakTheAmount(pix.PixSale)
 	if err != nil {
 		return "", err
 	}
@@ -119,7 +118,9 @@ func (a *NewCardMachineCase) PostSale(amountValue string) (string, error) {
 		Status: model.StatusPending,
 	}
 
+	fmt.Println("INICIANDO WAIT PAYMENT, ID 11:", id)
 	a.kafkaCase.ProducerGo(event)
+	fmt.Println("INICIANDO WAIT PAYMENT, ID 22:", id)
 	//							  use the channel of struct.
 	go a.paymentCase.WaitPaytament(a.PaymentChan, id)
 

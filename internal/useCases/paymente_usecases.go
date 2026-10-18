@@ -5,6 +5,7 @@ import (
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func NewPaymentCase(repo *repository.Repository, kafkaCase *kafka_config.NewProd
 	}
 }
 
-func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error) {
+func (p *NewPaymenteCase) Payment(payer model.Pix, id int) (model.SaleStatus, error) {
 	result, statusInDb, err := p.repo.ValidatePendingSale(id)
 
 	if err != nil {
@@ -28,10 +29,24 @@ func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error
 	}
 
 	if statusInDb != model.StatusPending {
+		event := model.PaymentKafka{
+			SaleId: id,
+			Value:  payer.AmountPix,
+			Status: model.StatusExpired,
+		}
+
+		p.kafkaCase.ProducerGo(event)
 		return model.StatusExpired, nil
 	}
 
 	if !result {
+		event := model.PaymentKafka{
+			SaleId: id,
+			Value:  payer.AmountPix,
+			Status: model.StatusExpired,
+		}
+
+		p.kafkaCase.ProducerGo(event)
 		return model.StatusExpired, err
 	}
 
@@ -42,7 +57,7 @@ func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error
 
 	value_db := fmt.Sprintf("%d.%02d", real, cents)
 
-	if value_db != value {
+	if value_db != payer.AmountPix {
 		event := model.PaymentKafka{
 			SaleId: id,
 			Value:  value_db,
@@ -66,6 +81,27 @@ func (p *NewPaymenteCase) Payment(value string, id int) (model.SaleStatus, error
 
 	p.kafkaCase.ProducerGo(event)
 
+	time_aprove := string(time.Now().Format(time.RFC3339))
+
+	_, err = p.repo.InserTimeAprove(time_aprove, id)
+
+	if err != nil {
+		return model.StatusReproved, err
+	}
+
+	timeAprove, err := p.repo.GetTimeArove(id)
+
+	if err != nil {
+		return model.StatusReproved, err
+	}
+
+	receiver, err := p.repo.GetAllValuesInCardMachine()
+
+	if err != nil {
+		return model.StatusReproved, err
+	}
+	p.taxReceipt(*receiver, id, payer.AmountPix, timeAprove, model.StatusApproved, payer)
+
 	return model.StatusApproved, nil
 }
 
@@ -78,7 +114,7 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 	for {
 		select {
 		case attempt := <-paymentChan:
-			status, err := p.Payment(attempt.Pix.AmountPix, id)
+			status, err := p.Payment(attempt.Pix, id)
 			if err != nil {
 				fmt.Print("pagamento reprovado")
 				attempt.Response <- status
@@ -99,7 +135,49 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 
 				return model.StatusExpired, err
 			}
+
+			event := model.PaymentKafka{
+				SaleId: id,
+				Value:  "",
+				Status: model.StatusExpired,
+			}
+
+			p.kafkaCase.ProducerGo(event)
+
 			return model.StatusExpired, nil
 		}
 	}
+}
+
+func (p *NewPaymenteCase) taxReceipt(data model.CardMachine, id int, value string, time string, status model.SaleStatus, payer model.Pix) {
+	text := fmt.Sprintf(`--------------------------------
+        COMPROVANTE PIX
+           APROVADO
+--------------------------------
+
+Valor: R$ %s
+Data: %s
+
+ID da venda: %d
+Status: %s
+
+PAGADOR
+Nome: %s
+CPF: %s
+Instituição: %s
+
+RECEBEDOR
+Nome: %s
+CPF/CNPJ: %s
+Instituição: %s
+
+--------------------------------
+Pagamento realizado via Pix
+--------------------------------`,
+		value, time, id, status, payer.Name, payer.Cpf, payer.Bank, data.PersonNameStorage, data.PersonCpf, data.BankInstituition)
+	fmt.Println(text)
+
+	byteText := []byte(text)
+
+	os.WriteFile("comprovante.txt", byteText, 0644)
 }

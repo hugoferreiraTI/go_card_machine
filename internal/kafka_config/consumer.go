@@ -28,7 +28,6 @@ func (c *NewConsumerCase) ConsumerGo() error {
 	if err != nil {
 		return err
 	}
-	//set up a channel for handling Ctrl-c
 	sigchan := make(chan os.Signal, 1)
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 
