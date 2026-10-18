@@ -1,65 +1,253 @@
 # Card Machine
 
-A project built in **Go** to simulate the behavior of a payment card machine.
+A project built in **Go** to simulate the behavior and backend flow of a payment card machine.
 
-The project is being developed in stages, starting with the **PIX** payment flow and using the **BR Code** standard to generate the payment payload, which is later converted into a QR Code.
+The project is being developed incrementally, starting with the **PIX** payment flow and the **BR Code** standard for dynamic payment payload generation.
 
-The goal is not only to generate a QR Code, but to understand and implement the different steps involved in a payment transaction, including persistence, transaction states, concurrency, and later communication between simulated PSP services.
+The goal is not only to generate a QR Code, but to explore the different components involved in a payment transaction, including:
+
+- Transaction persistence;
+- Payment states;
+- Concurrent processing;
+- Timeouts;
+- Event-driven communication;
+- Payment receipts;
+- Messaging with Apache Kafka;
+- Future communication between simulated payment services.
+
+The project is intended to work as a practical backend development laboratory focused on payment systems.
+
+---
 
 ## Technologies
 
 - Go
 - Gin
 - SQLite
+- Apache Kafka
+- Confluent Kafka Go Client
 - BR Code
 - go-qrcode
 - UUID
+- Docker
 
-## Current Status
+---
 
-The first payment flow is already working.
+# Current Status
+
+The first complete PIX payment lifecycle is now working.
 
 The application can currently:
 
-- Configure the card machine data;
-- Receive a sale amount through the API;
-- Validate the received amount;
-- Create a sale with `PENDING` status;
-- Persist the sale in SQLite;
-- Retrieve the generated sale ID;
-- Use the ID to build the dynamic payment location;
-- Generate a payload following the BR Code standard;
-- Generate a PNG QR Code containing the payload.
+- Configure the Card Machine;
+- Create a new sale;
+- Validate monetary values;
+- Persist sales in SQLite;
+- Generate a dynamic PIX BR Code payload;
+- Generate a PNG QR Code;
+- Keep the sale waiting for a payment asynchronously;
+- Receive payment attempts;
+- Approve valid payments;
+- Reject invalid payment attempts;
+- Keep a sale active after a rejected attempt;
+- Automatically expire unpaid sales after a timeout;
+- Store the approval timestamp only when a payment is successfully approved;
+- Publish transaction events through Apache Kafka;
+- Consume Kafka events;
+- Generate a PIX payment receipt after approval.
 
-## Current Flow
+The current transaction states are:
 
 ```text
-Card Machine configuration
-            ↓
-       POST /Sale
-            ↓
-      Receive amount
-            ↓
-      Validate amount
-            ↓
-    Create PENDING Sale
-            ↓
-      Save in SQLite
-            ↓
-   Retrieve generated ID
-            ↓
- Build payment location
-            ↓
- Generate BR Code payload
-            ↓
-      Generate QR Code
+PENDING
+APPROVED
+REPROVED
+EXPIRED
 ```
 
-## BR Code
+---
 
-The QR Code itself is only the visual representation of the payment data.
+# Current Payment Flow
 
-Before generating the QR Code, the application builds a **BR Code payload** containing information related to the payment, such as:
+The first end-to-end flow is complete.
+
+```text
+Card Machine Configuration
+           ↓
+      POST /Sale
+           ↓
+     Validate Amount
+           ↓
+    Create PENDING Sale
+           ↓
+      Save in SQLite
+           ↓
+   Retrieve Sale ID
+           ↓
+ Build Dynamic BR Code
+           ↓
+    Generate QR Code
+           ↓
+ Publish PENDING Event
+           ↓
+          Kafka
+           ↓
+ Wait for Payment Attempt
+           ↓
+      POST /Pay
+           ↓
+   Validate Payment
+      ↙          ↘
+ Incorrect      Correct
+ Amount          Amount
+    ↓               ↓
+REPROVED         APPROVED
+    ↓               ↓
+Kafka Event      Save Status
+    ↓               ↓
+Sale remains    Save Approval Time
+ PENDING            ↓
+                    Kafka Event
+                        ↓
+                 Generate Receipt
+```
+
+If no successful payment is received within the configured timeout:
+
+```text
+PENDING
+   ↓
+Timeout
+   ↓
+EXPIRED
+   ↓
+Persist Status
+   ↓
+Kafka Event
+```
+
+---
+
+# Transaction Lifecycle
+
+A sale starts with:
+
+```text
+PENDING
+```
+
+From there, different events may occur.
+
+A successful payment follows:
+
+```text
+PENDING
+   ↓
+APPROVED
+```
+
+An incorrect payment attempt follows:
+
+```text
+PENDING
+   ↓
+REPROVED
+   ↓
+PENDING
+```
+
+A rejected payment attempt does not finish the sale.
+
+The Card Machine continues waiting for another payment attempt until the payment is approved or the sale expires.
+
+If the payment timeout is reached:
+
+```text
+PENDING
+   ↓
+EXPIRED
+```
+
+This allows the sale lifecycle to represent the difference between a rejected **payment attempt** and the final state of the **sale itself**.
+
+---
+
+# Go Concurrency
+
+The payment flow uses Go concurrency features to keep the Card Machine waiting for payment without blocking the HTTP server.
+
+The current implementation explores:
+
+- Goroutines;
+- Channels;
+- `select`;
+- Timers;
+- Asynchronous payment processing.
+
+Conceptually:
+
+```text
+Create Sale
+    ↓
+Start WaitPayment goroutine
+    ↓
+Payment Channel
+   ↙     ↘
+Payment  Timer
+   ↓       ↓
+Process  EXPIRED
+```
+
+A `PaymentAttempt` carries the payment information and a response channel used to return the result of the attempt.
+
+This allows the HTTP payment request and the sale lifecycle to communicate without tightly coupling both flows.
+
+---
+
+# PIX Payment
+
+PIX is currently the first implemented payment method.
+
+A payment attempt contains information such as:
+
+```json
+{
+  "amount": "10.50",
+  "cpf": "12345678901",
+  "name": "Hugo Ferreira",
+  "bank": "Nubank"
+}
+```
+
+The application validates the payment against the currently active sale.
+
+If the amount matches the expected sale amount:
+
+```text
+PENDING
+   ↓
+APPROVED
+```
+
+If the amount is incorrect:
+
+```text
+PENDING
+   ↓
+REPROVED
+```
+
+The rejected attempt is reported, but the sale remains available for another payment attempt.
+
+---
+
+# BR Code
+
+The QR Code itself is only the visual representation of the PIX payment data.
+
+Before generating the QR Code, the application builds a **BR Code payload** containing information related to the transaction.
+
+Examples include:
 
 - Amount;
 - Merchant name;
@@ -67,37 +255,106 @@ Before generating the QR Code, the application builds a **BR Code payload** cont
 - Dynamic payment location;
 - Transaction-related information.
 
-The simplified flow is:
+The simplified generation flow is:
 
 ```text
-Sale data
-   ↓
+Sale
+ ↓
 DynamicQRParams
-   ↓
-BR Code payload
-   ↓
+ ↓
+BR Code Payload
+ ↓
 QR Code
 ```
 
-At the current stage, the project does not include a real banking or PSP infrastructure. Because of that, the generated QR Code represents a simulated PIX payment and cannot be processed by a real financial institution.
+The generated payment location includes the Sale ID.
 
-## Database
+Conceptual example:
 
-The project uses **SQLite**.
+```text
+Sale ID: 42
+     ↓
+pix.com.br/caminho/42
+     ↓
+BR Code
+     ↓
+qr.png
+```
 
-SQLite was chosen because the current project simulates a local card machine. At this stage, adding the complexity of a separate database server would not provide much benefit.
+At the current stage, this project does not communicate with the real PIX infrastructure.
 
-SQLite is lightweight, easy to distribute with the application, and well suited for local applications, embedded software, mobile applications, and prototypes.
+The QR Code represents a simulated payment flow and cannot be processed by a real financial institution.
 
-### Card Machine
+---
 
-The card machine table stores information used when generating payments, including merchant and owner data.
+# QR Code Generation
+
+After a sale is created:
+
+1. The sale is persisted;
+2. SQLite generates the Sale ID;
+3. The ID is recovered by the application;
+4. The ID is included in the dynamic payment location;
+5. The BR Code payload is generated;
+6. The BR Code payload is converted into a PNG QR Code;
+7. The sale enters the payment waiting flow.
+
+Example:
+
+```text
+Sale
+ ↓
+SQLite
+ ↓
+Sale ID
+ ↓
+Dynamic Location
+ ↓
+BR Code
+ ↓
+QR Code
+```
+
+---
+
+# Database
+
+The project currently uses **SQLite**.
+
+SQLite was chosen because the application is still simulating a local Card Machine.
+
+At this stage, introducing a separate database server would add infrastructure complexity without providing significant benefits to the current Card Machine service.
+
+SQLite is lightweight, portable, easy to distribute with the application, and well suited for:
+
+- Local applications;
+- Embedded systems;
+- Prototypes;
+- Development environments.
+
+---
+
+## Card Machine
+
+The Card Machine table stores information used during payment processing and receipt generation.
+
+Examples include:
+
+- Merchant name;
+- Store name;
+- CPF/CNPJ;
+- City;
+- State;
+- Financial institution information;
+- Machine-related information.
 
 A Card Machine must be configured before creating a sale.
 
-### Sales
+---
 
-Sales are persisted with information such as:
+## Sales
+
+Sales currently store information such as:
 
 ```text
 ID
@@ -107,78 +364,185 @@ Amount
 Status
 ```
 
-Monetary values are stored using integer units instead of floating-point values.
+The approval timestamp is only persisted when the payment reaches:
+
+```text
+APPROVED
+```
 
 For example:
 
 ```text
+PENDING
+time_approve = NULL
+
+EXPIRED
+time_approve = NULL
+
+APPROVED
+time_approve = <approval timestamp>
+```
+
+This prevents a failed or expired transaction from receiving an invalid approval timestamp.
+
+---
+
+# Monetary Values
+
+The API receives monetary values as strings.
+
+Example:
+
+```text
+"25.90"
+```
+
+This avoids relying on floating-point values for financial calculations.
+
+The amount is converted into integer components before being persisted and is reconstructed when required by payment-related operations such as BR Code generation.
+
+Example:
+
+```text
+"25.90"
+   ↓
+integer representation
+   ↓
+"25.90"
+```
+
+A future refactor will consolidate monetary values into a single integer representing the smallest currency unit.
+
+Example:
+
+```text
 R$ 25.90
    ↓
-2590
+2590 cents
 ```
 
-The decimal representation required by BR Code is rebuilt when needed.
+---
 
-## Sale Status
+# Apache Kafka
 
-The main status currently used is:
+Apache Kafka has been introduced into the project as the first messaging layer.
+
+The integration is still at an introductory stage and will evolve as the project is separated into multiple payment services.
+
+The Card Machine currently contains both:
+
+```text
+Kafka Producer
+Kafka Consumer
+```
+
+The producer publishes payment-related events, while the consumer is capable of consuming events from Kafka.
+
+Transaction events currently include states such as:
 
 ```text
 PENDING
+APPROVED
+REPROVED
+EXPIRED
 ```
 
-The transaction lifecycle will later evolve into:
+Example event:
+
+```json
+{
+  "SaleId": 42,
+  "value": "10.50",
+  "status": "APPROVED"
+}
+```
+
+The Sale ID is currently used as the Kafka message key.
+
+Conceptually:
 
 ```text
+Sale 42
+   ↓
 PENDING
-   ├── APPROVED
-   ├── REPROVED
-   └── EXPIRED
+   ↓
+Kafka
+
+Sale 42
+   ↓
+APPROVED
+   ↓
+Kafka
 ```
 
-These states are part of the next development stages.
+Using the same Sale ID as the message key allows events related to the same sale to follow the same partitioning strategy and preserve ordering within that partition.
 
-## Running the Project
+The current Kafka implementation is intentionally simple.
 
-Clone the repository:
+Future iterations will use Kafka for communication between independent payment services.
 
-```bash
-git clone <REPOSITORY_URL>
-```
+---
 
-Enter the project directory:
+# Payment Receipt
 
-```bash
-cd card_machine
-```
+When a PIX payment is approved, the Card Machine generates a transaction receipt.
 
-Install the dependencies:
-
-```bash
-go mod tidy
-```
-
-Run the application:
-
-```bash
-go run .
-```
-
-By default, the API runs on:
+The receipt currently contains information such as:
 
 ```text
-http://localhost:8080
+Payment value
+Approval date
+Sale ID
+Status
+
+Payer
+- Name
+- CPF
+- Institution
+
+Receiver
+- Name
+- CPF/CNPJ
+- Institution
 ```
 
-## Important: Card Machine Initialization
+Example:
 
-Before creating a sale, the Card Machine must be configured.
+```text
+--------------------------------
+        COMPROVANTE PIX
+           APROVADO
+--------------------------------
 
-The sale flow depends on merchant information to build the BR Code payload.
+Valor: R$ 10.50
 
-The testing flow should therefore begin with the card machine configuration.
+ID da venda: 42
+Status: APPROVED
 
-### 1. Configure Card Machine
+PAGADOR
+Nome: Example Payer
+CPF: ***********
+Instituição: Example Bank
+
+RECEBEDOR
+Nome: Example Merchant
+CPF/CNPJ: ***********
+Instituição: Example Bank
+
+--------------------------------
+Pagamento realizado via Pix
+--------------------------------
+```
+
+The current receipt is generated locally as a text file.
+
+---
+
+# API
+
+## 1. Configure Card Machine
+
+Before creating a sale, the Card Machine must be initialized.
 
 ```http
 POST /card_machine
@@ -196,17 +560,17 @@ Example request:
 }
 ```
 
-After this step, the application has the required merchant information to generate payments.
+The Card Machine configuration provides the merchant information required by later payment operations.
 
-## Creating a Sale
+---
 
-### 2. Create Sale
+## 2. Create Sale
 
 ```http
 POST /Sale
 ```
 
-Request body:
+Example request:
 
 ```json
 {
@@ -214,27 +578,7 @@ Request body:
 }
 ```
 
-The amount is received as a `string` so the application can validate the input without depending on floating-point representation.
-
-Internally, the amount is converted to an integer representation before being persisted.
-
-Example:
-
-```text
-"25.90"
-   ↓
-2590
-```
-
-When the BR Code payload needs to be generated:
-
-```text
-2590
-   ↓
-"25.90"
-```
-
-If the amount cannot be interpreted as a valid monetary value, the API returns `400 Bad Request`.
+The amount is received as a string and validated before the sale is persisted.
 
 Invalid example:
 
@@ -244,7 +588,7 @@ Invalid example:
 }
 ```
 
-Example response:
+Example error response:
 
 ```json
 {
@@ -253,35 +597,100 @@ Example response:
 }
 ```
 
-## QR Code Generation
+Only one active `PENDING` sale is currently allowed at a time.
 
-After the Sale is created:
+---
 
-1. The sale is persisted;
-2. SQLite generates an ID;
-3. The ID is used in the dynamic payment location;
-4. The BR Code payload is generated;
-5. The application generates a PNG QR Code.
+## 3. Pay Sale
 
-Conceptual example:
-
-```text
-Sale ID: 42
-
-      ↓
-
-pix.com.br/caminho/42
-
-      ↓
-
-BR Code
-
-      ↓
-
-qr.png
+```http
+POST /Pay
 ```
 
-## Tests
+Example request:
+
+```json
+{
+  "amount": "25.90",
+  "cpf": "12345678901",
+  "name": "Example Payer",
+  "bank": "Example Bank"
+}
+```
+
+The payment attempt is sent internally to the currently active sale.
+
+If the value matches:
+
+```text
+APPROVED
+```
+
+If the value does not match:
+
+```text
+REPROVED
+```
+
+If the sale no longer exists or has already expired, the payment is rejected.
+
+---
+
+# Running the Project
+
+Clone the repository:
+
+```bash
+git clone https://github.com/hugoferreiraTI/go_card_machine
+```
+
+Enter the project directory:
+
+```bash
+cd go_card_machine
+```
+
+Install dependencies:
+
+```bash
+go mod tidy
+```
+
+The project currently uses Kafka locally, so a Kafka broker must be available before testing messaging-related functionality.
+
+After starting the required infrastructure, run the application:
+
+```bash
+go run ./cmd
+```
+
+By default, the HTTP API runs on:
+
+```text
+http://localhost:8080
+```
+
+---
+
+# Important: Card Machine Initialization
+
+Before creating a sale, the Card Machine must be configured.
+
+The expected testing sequence is:
+
+```text
+POST /card_machine
+       ↓
+POST /Sale
+       ↓
+POST /Pay
+```
+
+The sale creation flow depends on merchant information stored during Card Machine initialization.
+
+---
+
+# Tests
 
 Run all tests with:
 
@@ -292,77 +701,208 @@ go test -v ./...
 Run a specific test with:
 
 ```bash
-go test -v -run TestHttPostSale
+go test -v -run TestHttPostSale ./...
 ```
 
-The current tests cover areas such as database connection, data insertion, and the HTTP sale creation flow.
+The project includes tests around areas such as:
 
-## Next Steps
+- Database connection;
+- Table creation;
+- Sale persistence;
+- Value insertion;
+- HTTP sale creation;
+- Payment-related behavior.
 
-The next major step is implementing the transaction lifecycle using Go concurrency features.
+The test suite will continue to grow as new payment methods and distributed services are introduced.
 
-After generating the QR Code, the application should wait for one of the possible outcomes:
+---
+
+# First Development Cycle
+
+The first major development cycle of the project is now complete.
+
+It includes:
 
 ```text
-             Sale PENDING
-                  ↓
-           Wait for result
-             ↙         ↘
-      Payment          Timeout
-         ↓                ↓
-     APPROVED           EXPIRED
+Card Machine Initialization
+          ↓
+Sale Creation
+          ↓
+SQLite Persistence
+          ↓
+Dynamic PIX QR Code
+          ↓
+PENDING
+          ↓
+Kafka Event
+          ↓
+Asynchronous Payment Waiting
+          ↓
+Payment Attempt
+          ↓
+APPROVED / REPROVED / EXPIRED
+          ↓
+Persistence
+          ↓
+Kafka Event
+          ↓
+Payment Receipt
 ```
 
-The implementation will explore concepts such as:
+This represents the first complete transaction lifecycle implemented by the project.
 
-- Goroutines;
-- Channels;
-- `select`;
-- Timers;
-- Transaction lifecycle control.
+---
 
-The `REPROVED` status will also be added.
+# Next Steps
 
-## Future Plans
+The next major development stage is adding **card payments**.
 
-In later stages, the project will move beyond manual Postman calls.
+The project will begin exploring:
 
-The goal is to create multiple services communicating with each other and simulate components found in a payment infrastructure.
+- Credit card payments;
+- Debit card payments;
+- Card-related transaction data;
+- Different payment processing flows;
+- Additional transaction validation;
+- Payment authorization simulation.
 
-Conceptual example:
+The objective is to avoid coupling the entire application to PIX and gradually introduce a more generic payment architecture.
+
+Conceptually:
+
+```text
+Sale
+ ↓
+Payment Method
+ ├── PIX
+ ├── Credit Card
+ └── Debit Card
+```
+
+---
+
+# Future PSP Architecture
+
+A later stage of the project will introduce a separate simulated **PSP — Payment Service Provider**.
+
+The long-term architecture is expected to evolve toward something similar to:
 
 ```text
 Card Machine
-     ↓
-Payment Service
-     ↓
+     │
+     │ payment.created
+     ▼
+   Kafka
+     │
+     ▼
+    PSP
+     │
+     │ Process Payment
+     ▼
+Simulated Banking / Payment Infrastructure
+     │
+     ▼
+    PSP
+     │
+     │ payment.result
+     ▼
+   Kafka
+     │
+     ▼
+Card Machine
+```
+
+Both services may contain producers and consumers.
+
+For example:
+
+```text
+Card Machine
+├── Kafka Producer
+└── Kafka Consumer
+
 PSP
-     ↓
-Simulated PSP / External Service
-     ↓
-Payment Confirmation
-     ↓
-Card Machine
+├── Kafka Consumer
+└── Kafka Producer
 ```
 
-This evolution will make it possible to explore:
+This architecture will allow the project to explore real distributed-system concerns naturally.
 
+---
+
+# Future Engineering Topics
+
+As the project grows, future iterations will explore:
+
+- Credit and debit card flows;
+- PSP simulation;
 - Service-to-service communication;
-- HTTP APIs;
-- JSON serialization;
-- Asynchronous processing;
-- Timeouts;
-- Retries;
+- Kafka-based asynchronous messaging;
 - Idempotency;
+- Payment IDs;
+- Transaction IDs;
+- Event IDs;
+- Retries;
+- Duplicate event handling;
+- Consumer idempotency;
+- API Gateway concepts;
+- Distributed state;
+- Failure recovery;
+- Event ordering;
+- Reconciliation;
+- Improved transaction persistence;
+- Monetary values stored entirely in minor units;
+- More complete automated tests.
+
+One important future problem will be ensuring that retries of the same payment operation cannot generate duplicate financial effects.
+
+Conceptually:
+
+```text
+Same Payment
+     ↓
+Request
+     ↓
+Failure / Retry
+     ↓
+Same Idempotency Key
+     ↓
+Single Financial Effect
+```
+
+---
+
+# Frontend
+
+The current focus of the project is backend development.
+
+A frontend may be introduced later to provide a visual representation of the Card Machine and make it easier to demonstrate the complete transaction lifecycle.
+
+Possible interfaces include:
+
+- Sale creation;
+- QR Code display;
+- Payment status updates;
+- Transaction history;
+- Payment receipt visualization.
+
+The frontend is not currently the primary technical focus of the project.
+
+---
+
+# Goal
+
+The main purpose of this project is to use a real-world payment problem as a practical backend development laboratory with Go.
+
+Rather than simply reproducing the visual interface of a card machine, the project focuses on understanding and implementing concepts behind payment processing, including:
+
+- Transaction lifecycle;
+- State transitions;
+- Persistence;
 - Concurrency;
-- Distributed state.
+- Messaging;
+- Failure handling;
+- Payment communication;
+- Distributed architecture.
 
-PIX is currently the main focus of the project, but other payment methods and card brands may be added in the future.
-
-## Goal
-
-The main purpose of this project is to use a real-world problem as a practical backend development laboratory with Go.
-
-More than reproducing a card machine interface, the goal is to understand the flows, protocols, state transitions, and architecture decisions involved in processing a payment transaction.
-
-The project will continue to evolve as new flows are implemented.
+The project will continue evolving incrementally as new payment methods and services are implemented.
