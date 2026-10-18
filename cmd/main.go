@@ -1,6 +1,7 @@
 package main
 
 import (
+	"card_machine/documents"
 	"card_machine/internal/handler"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/repository"
@@ -42,6 +43,7 @@ func main() {
 
 	//initialize the Gin router
 	server := gin.Default()
+	documents.RegisterRoutes(server)
 
 	//create the table
 	authRepository.CreateTableOfCardMachine()

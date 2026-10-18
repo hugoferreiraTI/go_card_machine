@@ -1,0 +1,453 @@
+openapi: 3.0.3
+info:
+  title: Card Machine API
+  version: 1.0.0
+  description: |
+    API de simulação de uma máquina de pagamentos PIX. Este contrato descreve
+    o comportamento atual dos handlers, casos de uso e validações do projeto.
+
+    **Sequência de uso:** `POST /card_machine` → `POST /Sale` → `POST /Pay`.
+    As rotas diferenciam maiúsculas de minúsculas. Não há autenticação,
+    parâmetros de URL ou query string nestas operações.
+
+    Envie os corpos como JSON (`Content-Type: application/json`). Valores
+    monetários são strings. Na criação da venda a chave é **`PixSale`**;
+    no pagamento a chave é **`amount`**. A comparação do pagamento é textual:
+    para uma venda de `10.5`, envie `amount: "10.50"`.
+
+    Somente uma venda PENDING pode estar ativa. A espera pelo pagamento dura
+    30 segundos, contados pelo processo após a criação da venda. Uma tentativa
+    REPROVED não encerra a espera nem altera a venda para REPROVED no banco.
+    A aprovação encerra a espera; o timeout persiste EXPIRED.
+
+    SQLite guarda as configurações e vendas; os eventos são enviados ao tópico
+    Kafka `sale` (broker configurado em `localhost:9092`). O QR Code e o
+    comprovante são arquivos locais (`qr.png` e `comprovante.txt`), e não são
+    devolvidos como arquivo, URL ou payload nas respostas HTTP.
+
+    Os exemplos preservam inclusive a grafia atual das mensagens (`sucess`,
+    `qrcocode sucess`). Erros internos de criação de venda também usam HTTP 400.
+    O middleware Recovery do Gin responde HTTP 500, sem corpo, em caso de panic.
+    Rotas e métodos não registrados recebem o 404 padrão do Gin, com texto
+    `404 page not found`.
+servers:
+  - url: /
+    description: Mesmo servidor que está servindo o Swagger
+  - url: http://localhost:8080
+    description: Ambiente local padrão
+security: []
+tags:
+  - name: Máquina
+    description: Cadastro dos dados do recebedor usados no QR Code e no comprovante.
+  - name: Vendas
+    description: Criação da venda PIX e início da espera pelo pagamento.
+  - name: Pagamentos
+    description: Tentativas de pagamento da venda que está aguardando no processo atual.
+paths:
+  /card_machine:
+    post:
+      tags: [Máquina]
+      operationId: initializeCardMachine
+      summary: Configurar a máquina e o recebedor
+      description: |
+        Valida os campos obrigatórios, verifica se o CPF já foi cadastrado e
+        persiste os dados em `bank_machine`. UUID e número de série são gerados
+        pelo servidor; valores enviados nestes campos são sobrescritos.
+
+        O CPF deve conter exatamente 11 caracteres. A implementação não valida
+        dígitos verificadores nem exige que todos os caracteres sejam números.
+        O estado é obrigatório, mas não há validação de UF ou comprimento 2.
+        Cadastros com CPFs diferentes são permitidos; as operações seguintes
+        usam o último registro percorrido pela consulta, sem ordenação explícita.
+      requestBody:
+        required: true
+        description: Dados do recebedor. Todos os seis campos abaixo são obrigatórios.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardMachineRequest'
+            example:
+              bank: Banco Exemplo
+              person_name_storage: Loja Exemplo
+              storage_name: Loja Centro
+              person_cpf: '12345678901'
+              city: SAO PAULO
+              state: SP
+      responses:
+        '201':
+          description: Cadastro persistido. A resposta não inclui UUID, número de série nem os dados cadastrados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardMachineCreated'
+              example:
+                message: Card machine initialized successfully
+        '400':
+          description: |
+            JSON malformado, corpo vazio, tipo de campo incompatível, campo
+            obrigatório ausente/vazio ou CPF com comprimento diferente de 11.
+            `BindJSON` fixa o Content-Type em text/plain antes de o handler
+            escrever o corpo JSON de erro. Os detalhes da validação não são expostos.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Invalid request body
+        '409':
+          description: O CPF já existe em bank_machine.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Cpf already exists
+        '500':
+          description: |
+            Falha ao consultar a existência do CPF ou ao inserir o cadastro
+            (por exemplo, tabela ausente ou banco indisponível). O erro interno
+            é substituído pela mensagem abaixo. Um panic recuperado pelo Gin
+            pode produzir este mesmo código com corpo vazio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Failed to insert value
+  /Sale:
+    post:
+      tags: [Vendas]
+      operationId: createPixSale
+      summary: Criar uma venda e gerar seu QR Code PIX
+      description: |
+        Verifica o status da última venda, recupera os dados da máquina, separa
+        reais e centavos, persiste a venda PENDING e gera `qr.png` (256 × 256).
+        Publica PENDING no Kafka e inicia uma goroutine que espera pagamento
+        por até 30 segundos. A resposta HTTP ocorre sem aguardar o pagamento.
+
+        É necessário configurar o recebedor antes. Se não houver cadastro, os
+        campos do recebedor ficam vazios e a geração do BR Code falha. O erro
+        pode ocorrer depois da inserção da venda; não há rollback. Nesse caso,
+        uma venda PENDING pode permanecer no banco sem um listener de pagamento.
+
+        Use a propriedade **`PixSale`**. Enviar apenas `amount` deixa PixSale
+        vazio e causa erro de conversão. São aceitas strings como `"25"`,
+        `"25.9"` e `"25.90"`, normalizadas para `"25.00"`, `"25.90"`
+        e `"25.90"`. Use ponto como separador. Mais de uma separação ou mais
+        de duas casas decimais são rejeitados. Não há validação explícita de
+        valor positivo; as partes são convertidas com strconv.ParseInt em int64.
+
+        O retorno de sucesso contém apenas uma mensagem. ID, valor normalizado,
+        status, BR Code e imagem não fazem parte do corpo HTTP.
+      requestBody:
+        required: true
+        description: Valor da venda em reais, representado por uma string.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleRequest'
+            examples:
+              comCentavos:
+                summary: Venda de R$ 25,90
+                value: {PixSale: '25.90'}
+              inteiro:
+                summary: Venda de R$ 25,00
+                value: {PixSale: '25'}
+              umaCasa:
+                summary: Normalizado para R$ 25,90
+                value: {PixSale: '25.9'}
+      responses:
+        '201':
+          description: Venda persistida e QR Code gerado; espera assíncrona pelo pagamento iniciada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleCreated'
+              example:
+                sucess: qrcocode sucess
+        '400':
+          description: |
+            Erro de binding retorna somente `error: "json inválido"`, com
+            Content-Type text/plain. Os demais erros retornam JSON com `error`
+            e `result: ""`, incluindo conflito com venda PENDING, erro na
+            conversão do valor, falha SQL, geração do BR Code ou gravação do PNG.
+            As mensagens de ParseInt, SQLite e sistema de arquivos são dinâmicas
+            e repassadas por err.Error(); os exemplos não esgotam essas mensagens.
+            Ausência de cadastro pode causar RN_QR_004; cidade vazia pode causar
+            RN_QR_005. Erros do produtor Kafka não são convertidos em erro HTTP.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: json inválido
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleErrorResponse'
+              examples:
+                vendaAtiva:
+                  summary: A última venda ainda está PENDING
+                  value:
+                    error: The last sale is active.
+                    result: ''
+                separadores:
+                  summary: PixSale igual a "10.2.3"
+                  value:
+                    error: invalid value
+                    result: ''
+                centavos:
+                  summary: PixSale igual a "10.500"
+                  value:
+                    error: invalid cents
+                    result: ''
+                conversao:
+                  summary: PixSale igual a "abc"
+                  value:
+                    error: 'strconv.ParseInt: parsing "abc": invalid syntax'
+                    result: ''
+                valorAusente:
+                  summary: PixSale ausente ou vazio (inclusive se apenas amount for enviado)
+                  value:
+                    error: 'strconv.ParseInt: parsing "": invalid syntax'
+                    result: ''
+                recebedorAusente:
+                  summary: Máquina sem nome de recebedor configurado
+                  value:
+                    error: 'RN_QR_004: merchant name is required'
+                    result: ''
+                cidadeAusente:
+                  summary: Cadastro existente sem cidade
+                  value:
+                    error: 'RN_QR_005: merchant city is required'
+                    result: ''
+                banco:
+                  summary: Exemplo de erro SQL repassado
+                  value:
+                    error: 'no such table: sales'
+                    result: ''
+                arquivo:
+                  summary: Exemplo de falha ao gravar o QR Code
+                  value:
+                    error: 'open qr.png: permission denied'
+                    result: ''
+        '500':
+          $ref: '#/components/responses/UnhandledPanic'
+  /Pay:
+    post:
+      tags: [Pagamentos]
+      operationId: payActiveSale
+      summary: Tentar pagar a venda ativa
+      description: |
+        Envia a tentativa pelo canal em memória para o listener da venda ativa.
+        Não recebe ID: o listener determina qual venda será paga. Se não houver
+        listener disponível em até 1 segundo, retorna 409. Após a entrega ao
+        listener, o handler espera o resultado sem um segundo timeout.
+
+        O campo amount é comparado literalmente ao valor normalizado no banco.
+        Para uma venda de R$ 25,90, `"25.90"` pode aprovar; `"25.9"`,
+        `"25,90"` ou um valor diferente retornam REPROVED. amount não tem a
+        validação binding required: ausente ou vazio chega à comparação e
+        normalmente é reprovado quando há uma venda ativa.
+
+        APPROVED atualiza o status e o horário de aprovação, publica o evento
+        Kafka e gera `comprovante.txt`. REPROVED por divergência de valor publica
+        um evento e mantém a venda PENDING, permitindo novas tentativas antes
+        dos 30 segundos. EXPIRED indica venda sem status PENDING ou certas
+        falhas internas; falhas internas também podem resultar em REPROVED.
+        O handler só retorna o status, sem detalhes de erro do processamento.
+
+        A resposta 200 não confirma entrega do evento Kafka nem gravação do
+        comprovante: esses erros não são propagados pela implementação atual.
+      requestBody:
+        required: true
+        description: Dados do pagador e valor exato da venda ativa.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            example:
+              amount: '25.90'
+              cpf: '10987654321'
+              name: Cliente Exemplo
+              bank: Banco do Pagador
+      responses:
+        '200':
+          description: O processamento retornou APPROVED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentApproved'
+              example:
+                status: APPROVED
+        '400':
+          description: |
+            JSON inválido, tipo incompatível, cpf com comprimento diferente de
+            11 ou cpf/name/bank ausentes ou vazios retornam `error`, com
+            Content-Type text/plain por causa de BindJSON. Uma tentativa
+            processada sem aprovação retorna JSON com status REPROVED ou EXPIRED.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: json inválido
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentRejected'
+              examples:
+                reprovado:
+                  summary: Valor divergente ou determinada falha interna
+                  value:
+                    status: REPROVED
+                expirado:
+                  summary: Venda sem status PENDING ou determinada falha interna
+                  value:
+                    status: EXPIRED
+        '409':
+          description: |
+            Não foi possível entregar a tentativa ao listener em 1 segundo.
+            Ocorre, por exemplo, sem venda criada, após aprovação/expiração,
+            após reiniciar o processo ou se o listener estiver ocupado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: The time for payment expired or sale dont existed
+        '500':
+          $ref: '#/components/responses/UnhandledPanic'
+components:
+  responses:
+    UnhandledPanic:
+      description: Panic no handler recuperado pelo middleware Recovery do Gin; resposta sem corpo.
+  schemas:
+    CardMachineRequest:
+      type: object
+      required: [bank, person_name_storage, storage_name, person_cpf, city, state]
+      properties:
+        bank:
+          type: string
+          minLength: 1
+          description: Instituição financeira do recebedor, usada no comprovante.
+          example: Banco Exemplo
+        person_name_storage:
+          type: string
+          minLength: 1
+          description: Nome do recebedor; o gerador do BR Code limita este texto a 25 bytes.
+          example: Loja Exemplo
+        storage_name:
+          type: string
+          minLength: 1
+          description: Nome do estabelecimento persistido no cadastro.
+          example: Loja Centro
+        person_cpf:
+          type: string
+          minLength: 11
+          maxLength: 11
+          description: Identificador com exatamente 11 caracteres, sem validação de dígitos verificadores. Deve ser único no cadastro.
+          example: '12345678901'
+        city:
+          type: string
+          minLength: 1
+          description: Cidade do recebedor; o gerador do BR Code limita este texto a 15 bytes.
+          example: SAO PAULO
+        state:
+          type: string
+          minLength: 1
+          description: Estado do recebedor; a API não restringe a uma UF válida nem a dois caracteres.
+          example: SP
+    SaleRequest:
+      type: object
+      required: [PixSale]
+      properties:
+        PixSale:
+          type: string
+          minLength: 1
+          description: |
+            Valor necessário para criar a venda. Não possui binding required,
+            mas ausente/vazio falha na conversão. Use string com inteiro e,
+            opcionalmente, ponto seguido de uma ou duas casas decimais.
+            Cada parte precisa caber em int64. Números JSON não são aceitos.
+          example: '25.90'
+    PaymentRequest:
+      type: object
+      required: [cpf, name, bank]
+      properties:
+        amount:
+          type: string
+          description: |
+            Valor textual em reais. Para aprovação precisa coincidir exatamente
+            com o valor da venda formatado com duas casas decimais. Ausência
+            ou string vazia não falha no binding, mas não corresponde ao valor.
+          example: '25.90'
+        cpf:
+          type: string
+          minLength: 11
+          maxLength: 11
+          description: CPF do pagador com exatamente 11 caracteres; não há validação de dígitos verificadores.
+          example: '10987654321'
+        name:
+          type: string
+          minLength: 1
+          description: Nome do pagador usado no comprovante.
+          example: Cliente Exemplo
+        bank:
+          type: string
+          minLength: 1
+          description: Instituição financeira do pagador usada no comprovante.
+          example: Banco do Pagador
+    CardMachineCreated:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          enum: [Card machine initialized successfully]
+    SaleCreated:
+      type: object
+      required: [sucess]
+      properties:
+        sucess:
+          type: string
+          enum: [qrcocode sucess]
+          description: Nome e mensagem preservam a grafia atual do handler.
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Mensagem de erro retornada pelo handler.
+    SaleErrorResponse:
+      type: object
+      required: [error, result]
+      properties:
+        error:
+          type: string
+          description: Mensagem original do caso de uso, banco, conversão, BR Code ou sistema de arquivos.
+        result:
+          type: string
+          enum: ['']
+          description: O caso de uso retorna string vazia em todos os caminhos de erro atuais.
+    PaymentApproved:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [APPROVED]
+    PaymentRejected:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [REPROVED, EXPIRED]
+          description: Status retornado pela tentativa, sem detalhamento do erro interno.
+    SaleStatus:
+      type: string
+      enum: [PENDING, APPROVED, REPROVED, EXPIRED]
+      description: |
+        Estados usados no fluxo e nos eventos Kafka. PENDING é persistido ao
+        criar a venda; APPROVED e EXPIRED podem encerrar a venda. REPROVED
+        representa uma tentativa reprovada e não encerra a venda por valor divergente.
