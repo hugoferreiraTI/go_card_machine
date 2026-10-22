@@ -1,24 +1,78 @@
 package usecases
 
 import (
+	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/skip2/go-qrcode"
 )
 
 type NewPaymenteCase struct {
-	repo      *repository.Repository
-	kafkaCase *kafka_config.NewProducerCase
+	repo        *repository.Repository
+	kafkaCase   *kafka_config.NewProducerCase
+	cardMachine *NewCardMachineCase
+	PaymentChan chan PaymentAttempt
+}
+
+type PaymentAttempt struct {
+	Pix      model.Pix
+	Response chan model.SaleStatus
 }
 
 func NewPaymentCase(repo *repository.Repository, kafkaCase *kafka_config.NewProducerCase) *NewPaymenteCase {
 	return &NewPaymenteCase{
-		repo:      repo,
-		kafkaCase: kafkaCase,
+		repo:        repo,
+		kafkaCase:   kafkaCase,
+		PaymentChan: make(chan PaymentAttempt),
 	}
+}
+
+func (a *NewPaymenteCase) ProcessPixSale(real, cents int64, id int) (string, error) {
+	merchant, err := a.repo.GetAllValuesInCardMachine()
+	//urlExemplo := "//https.com.br/caminho/123"
+	if err != nil {
+		return "", err
+	}
+
+	amountQrCode := fmt.Sprintf("%d.%02d", real, cents)
+
+	qrCode := brcode.DynamicQRParams{
+		MerchantName: merchant.PersonNameStorage,
+		MerchantCity: merchant.City,
+		Amount:       amountQrCode,
+	}
+	url := fmt.Sprintf("https://pix.com.br/caminho/%d", id)
+
+	qrCode.URL = url
+
+	//genereate a qrcode in file.
+	payload, err := brcode.BuildDynamicQR(qrCode)
+
+	if err != nil {
+		return "", err
+	}
+
+	err = qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
+	if err != nil {
+		return "", err
+	}
+	event := model.PaymentKafka{
+		SaleId: id,
+		Value:  amountQrCode,
+		Status: model.StatusPending,
+	}
+
+	a.kafkaCase.ProducerGo(event)
+
+	//use the channel of struct.
+	go a.WaitPaytament(a.PaymentChan, id)
+
+	return "qrcocode sucess", nil
 }
 
 func (p *NewPaymenteCase) Payment(payer model.Pix, id int) (model.SaleStatus, error) {

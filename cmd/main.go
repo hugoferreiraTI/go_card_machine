@@ -39,7 +39,7 @@ func main() {
 	authRepository := repository.NewRepository(dbConnection)
 	authPayment := usecases.NewPaymentCase(authRepository, kafkaProduceCase)
 	authUseCase := usecases.NewCardMachineCaseDependency(authRepository, authPayment, kafkaProduceCase)
-	authHandler := handler.NewHandlerCase(authUseCase)
+	authHandler := handler.NewHandlerCase(authUseCase, authPayment)
 
 	//initialize the Gin router
 	server := gin.Default()
@@ -50,7 +50,7 @@ func main() {
 	authRepository.CreateTableSale()
 
 	server.POST("/card_machine", authHandler.InsertValueInCardMachine) //initialize the card machine first.
-	server.POST("/Sale", authHandler.PostSales)
-	server.POST("/Pay", authHandler.Payment)
+	server.POST("/Sale/pix", authHandler.PostSalePix)
+	server.POST("/Pay/pix", authHandler.PaymentPix)
 	server.Run(":8080")
 }

@@ -11,13 +11,17 @@ import (
 
 type HandlerCase struct {
 	NewCardMachineCase *usecases.NewCardMachineCase
+	NewPaymentPixCase  *usecases.NewPaymenteCase
+	NewPaymentCardCase *usecases.NewPaymentCardCase
 }
 
 func NewHandlerCase(
 	cardMachineCase *usecases.NewCardMachineCase,
+	paymentPixCase *usecases.NewPaymenteCase,
 ) *HandlerCase {
 	return &HandlerCase{
 		NewCardMachineCase: cardMachineCase,
+		NewPaymentPixCase:  paymentPixCase,
 	}
 }
 
@@ -46,15 +50,15 @@ func (h *HandlerCase) InsertValueInCardMachine(c *gin.Context) {
 
 }
 
-func (h *HandlerCase) PostSales(c *gin.Context) {
-	var pixSale model.PixSale
+func (h *HandlerCase) PostSalePix(c *gin.Context) {
+	var sale model.Sale
 
-	if err := c.BindJSON(&pixSale); err != nil {
+	if err := c.BindJSON(&sale); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
 		return
 	}
 
-	result, err := h.NewCardMachineCase.PostSale(pixSale)
+	result, err := h.NewCardMachineCase.PostSale(sale)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "result": result})
@@ -64,7 +68,7 @@ func (h *HandlerCase) PostSales(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"sucess": result})
 }
 
-func (h *HandlerCase) Payment(c *gin.Context) {
+func (h *HandlerCase) PaymentPix(c *gin.Context) {
 	var pix model.Pix                           //json recive
 	responseChan := make(chan model.SaleStatus) //create a channel
 
@@ -85,7 +89,7 @@ func (h *HandlerCase) Payment(c *gin.Context) {
 
 	//Prevent the request from blocking if no payment listener is active.
 	select {
-	case h.NewCardMachineCase.PaymentChan <- attempt:
+	case h.NewPaymentPixCase.PaymentChan <- attempt:
 		//value envied for PaymentChan
 	case <-time.After(1 * time.Second):
 		c.JSON(http.StatusConflict, gin.H{

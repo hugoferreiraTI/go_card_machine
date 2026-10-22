@@ -90,7 +90,9 @@ func TestInsertValueInTableSale(t *testing.T) {
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
 
-	result, id, err := repo.InsertValueInTableSale(time_sale.String(), time_approved, status, cents, real)
+	enumPix := model.PaymentPix //for exempl
+
+	result, id, err := repo.InsertValueInTableSale(time_sale.String(), time_approved, status, cents, real, enumPix)
 
 	if err != nil {
 		fmt.Print(err)

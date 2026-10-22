@@ -906,3 +906,46 @@ Rather than simply reproducing the visual interface of a card machine, the proje
 - Distributed architecture.
 
 The project will continue evolving incrementally as new payment methods and services are implemented.
+
+FLOW = LOJA -> ADQUIRENTE -> BANDEIRA -> BANCO -> BANDEIRA -> ADQUIRENTE -> PAGAR.ME -> LOJA
+
+Source: 
+https://docs.pagar.me/docs/cart%C3%A3o-de-cr%C3%A9dito?utm_source=chatgpt.com
+https://www.bcb.gov.br/content/estabilidadefinanceira/pix/Regulamento_Pix/II_ManualdePadroesparaIniciacaodoPix.pdf
+https://github.com/skip2/go-qrcode?utm_source=chatgpt.com 
+https://www.misbah.co/blog/store-money-as-integer-cents-never-a-float?utm_source=chatgpt.com 
+https://blog.stackademic.com/designing-a-payment-processing-system-in-golang-using-microservices-cce7a8213bba
+https://github.com/confluentinc/confluent-kafka-go
+https://docs.docker.com/guides/kafka/
+https://www.santander.com.br/blog/para-voce/bandeira-do-cartao/
+https://www.santander.com.br/blog/para-voce/o-que-e-codigo-cvv/
+https://developer.visa.com/api-reference/visa-accept?utm_source=chatgpt.com
+https://www.google.com/search?q=EMV+global+tag&sca_esv=995ca91a96abc5c1&rlz=1C1GCEU_enBR1213BR1213&sxsrf=APpeQntB_F-km0Cqg-pw1bqOfwMXbygh7Q%3A1792426012471&ei=HEDWaq-iHKmI5OUP1IrRmAI&biw=1920&bih=919&uact=5&oq=EMV+global+tag&gs_lp=Egxnd3Mtd2l6LXNlcnAiDkVNViBnbG9iYWwgdGFnMgUQIRigATIFECEYoAFI2wNQAFi3AnAAeAGQAQCYAfIBoAHBB6oBBTAuMy4yuAEDyAEA-AEBmAIFoAK6CMICCBAAGIAEGMsBwgIGEAAYFhgemAMAkgcFMC4xLjSgB7kTsgcFMC4xLjS4B7oIwgcFMi0yLjPIByiACAE&sclient=gws-wiz-serp
+https://cryptoid.com.br/criptografia/aes-padrao-de-criptografia-avancado-o-que-e-e-como-funciona/
+https://csrc.nist.gov/pubs/sp/800/38/b/final
+
+flow card: 
+O fluxo de uma transação com cartão
+
+Quando você insere ou aproxima seu cartão em uma maquininha, a bandeira é acionada no seguinte fluxo:
+
+
+1. Captura da Informação: a máquina do lojista (adquirente) captura os dados criptografados do cartão e envia a requisição de compra;
+
+
+2. Roteamento pela Bandeira: o adquirente envia essa requisição para a rede da bandeira. A bandeira, por sua vez, identifica o banco emissor através do número do cartão (BIN);
+
+
+3. Autorização pelo banco: a bandeira encaminha a requisição ao banco emissor. O banco verifica se há limite de crédito, se o cartão está ativo e se a transação é legítima, e envia uma resposta de autorização ou recusa de volta para a bandeira;
+
+
+4. Confirmação: a bandeira retransmite a resposta para o adquirente, que, por fim, exibe a mensagem de "transação aprovada" ou "negada" na maquininha do lojista.
+
+
+Todo esse processo, que envolve a bandeira como o principal canal de comunicação, acontece em meros segundos, demonstrando a robustez tecnológica dessas operadoras.
+
+Cartões que começam com o número 4 são Visa.
+
+Cartões que começam com o número 5 são Mastercard.
+
+Cartões que começam com o número 3 são frequentemente American Express.

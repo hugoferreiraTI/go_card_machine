@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/google/uuid"
 )
 
 func TestPutStatus(t *testing.T) {
@@ -46,7 +48,7 @@ func TestPutStatus(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	_ = handler.NewHandlerCase(authCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase)
 
 	status, err := paymentCase.Payment(value, id)
 
@@ -62,7 +64,7 @@ func TestPutStatus(t *testing.T) {
 
 }
 
-func TestPayment(t *testing.T) {
+func TestPaymentPix(t *testing.T) {
 	amount := make(chan usecases.PaymentAttempt)
 	responseChan := make(chan model.SaleStatus)
 
@@ -103,7 +105,7 @@ func TestPayment(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	_ = handler.NewHandlerCase(authCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase)
 
 	status, err := paymentCase.WaitPaytament(amount, id)
 
@@ -118,5 +120,92 @@ func TestPayment(t *testing.T) {
 	}
 
 	fmt.Print(status)
+
+}
+
+func TestProcessSaleCard(t *testing.T) {
+	// Call the DbConnection function to test the database connection
+	db, err, _ := repository.DbConnection()
+	if err != nil {
+		fmt.Print(err)
+		t.Fatal(err)
+		return
+	}
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
+
+	//Initialize the repository with dependency
+	repo := repository.NewRepository(db)
+	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
+	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(repo, kafkaCase)
+	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase)
+
+	var real int64
+	var cents int64
+
+	real = 20
+	cents = 10
+	id := 1
+	status, err := paymentCardCase.ProcessSaleCard(real, cents, id)
+
+	if err != nil {
+		fmt.Printf("Failed to a crypto: %s", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(status)
+
+}
+
+func TestCrypto(t *testing.T) {
+	// Call the DbConnection function to test the database connection
+	db, err, _ := repository.DbConnection()
+	if err != nil {
+		fmt.Print(err)
+		t.Fatal(err)
+		return
+	}
+	produce, err := kafka.NewProducer(&kafka.ConfigMap{
+		// User-specific properties that you must set
+		"bootstrap.servers": "localhost:9092", //run in docker local
+		// Fixed properties
+		"acks": "all"})
+
+	if err != nil {
+		fmt.Printf("Failed to create producer: %s", err)
+		os.Exit(1)
+	}
+
+	//Initialize the repository with dependency
+	repo := repository.NewRepository(db)
+	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(repo, kafkaCase)
+
+	uuidCrypto := uuid.New()
+
+	time := time.Now().String()
+	cryptogram := model.Cryptogram{
+		StatusCard:               model.StatusPending,
+		AmountCrypt:              "35.50",
+		TimeNowCrypt:             time,
+		NumberUnpredictableCrypt: uuidCrypto.String(),
+	}
+
+	_, err = paymentCardCase.Crypto(cryptogram)
+
+	if err != nil {
+		fmt.Printf("Failed to a crypto: %s", err)
+		os.Exit(1)
+	}
 
 }

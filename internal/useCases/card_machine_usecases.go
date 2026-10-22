@@ -1,31 +1,23 @@
 package usecases
 
 import (
-	brcode "card_machine/internal/brcode_simplify"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skip2/go-qrcode"
 )
 
 type NewCardMachineCase struct {
-	repo        *repository.Repository
-	paymentCase *NewPaymenteCase
-	kafkaCase   *kafka_config.NewProducerCase
-	PaymentChan chan PaymentAttempt
-}
-
-type PaymentAttempt struct {
-	Pix      model.Pix
-	Response chan model.SaleStatus
+	repo            *repository.Repository
+	paymentPixCase  *NewPaymenteCase
+	paymentCardCase *NewPaymentCardCase
+	kafkaCase       *kafka_config.NewProducerCase
 }
 
 func NewCardMachineCaseDependency(
@@ -34,10 +26,9 @@ func NewCardMachineCaseDependency(
 	kafkaCase *kafka_config.NewProducerCase,
 ) *NewCardMachineCase {
 	return &NewCardMachineCase{
-		repo:        repo,
-		paymentCase: paymentCase,
-		kafkaCase:   kafkaCase,
-		PaymentChan: make(chan PaymentAttempt),
+		repo:           repo,
+		paymentPixCase: paymentCase,
+		kafkaCase:      kafkaCase,
 	}
 }
 
@@ -60,7 +51,7 @@ func (a *NewCardMachineCase) InsertValueInCardMachine(cardMachine *model.CardMac
 }
 
 // ============================================ SALES CASES =================================================================================
-func (a *NewCardMachineCase) PostSale(pix model.PixSale) (string, error) {
+func (a *NewCardMachineCase) PostSale(sale model.Sale) (string, error) {
 	status, _, err := a.repo.VerifyTheStatus()
 
 	if err != nil {
@@ -71,69 +62,60 @@ func (a *NewCardMachineCase) PostSale(pix model.PixSale) (string, error) {
 		return "", errors.New("The last sale is active.")
 	}
 
-	merchant, err := a.repo.GetAllValuesInCardMachine()
-	//urlExemplo := "//https.com.br/caminho/123"
+	real, cents, err := a.breakTheAmount(sale.Amount)
 	if err != nil {
 		return "", err
 	}
 
-	fmt.Print("chamei a func")
+	if sale.PayType == model.PaymentPix {
 
-	real, cents, err := a.breakTheAmount(pix.PixSale)
-	if err != nil {
-		return "", err
+		enumPix := model.PaymentPix
+
+		id, err := a.InsertValueInTable(cents, real, enumPix) //save separeted the cents and real
+
+		if err != nil {
+			return "", err
+		}
+
+		result, err := a.paymentPixCase.ProcessPixSale(real, cents, id)
+		if err != nil {
+			return "", err
+		}
+
+		return result, nil
+
 	}
 
-	id, err := a.InsertValueInTable(cents, real) //save separeted the cents and real
+	if sale.PayType == model.PaymentCard {
+		enumCard := model.PaymentCard
 
-	if err != nil {
-		return "", err
+		id, err := a.InsertValueInTable(cents, real, enumCard) //save separeted the cents and real
+
+		if err != nil {
+			return "", err
+		}
+
+		result, err := a.paymentCardCase.ProcessSaleCard(real, cents, id)
+		if err != nil {
+			return "", err
+		}
+
+		resultString := string(result)
+
+		return resultString, nil
+
 	}
 
-	amountQrCode := fmt.Sprintf("%d.%02d", real, cents)
-
-	qrCode := brcode.DynamicQRParams{
-		MerchantName: merchant.PersonNameStorage,
-		MerchantCity: merchant.City,
-		Amount:       amountQrCode,
-	}
-	url := fmt.Sprintf("https://pix.com.br/caminho/%d", id)
-
-	qrCode.URL = url
-
-	//genereate a qrcode in file.
-	payload, err := brcode.BuildDynamicQR(qrCode)
-
-	if err != nil {
-		return "", err
-	}
-
-	err = qrcode.WriteFile(payload, qrcode.High, 256, "qr.png")
-	if err != nil {
-		return "", err
-	}
-	event := model.PaymentKafka{
-		SaleId: id,
-		Value:  amountQrCode,
-		Status: model.StatusPending,
-	}
-
-	fmt.Println("INICIANDO WAIT PAYMENT, ID 11:", id)
-	a.kafkaCase.ProducerGo(event)
-	fmt.Println("INICIANDO WAIT PAYMENT, ID 22:", id)
-	//							  use the channel of struct.
-	go a.paymentCase.WaitPaytament(a.PaymentChan, id)
-
-	return "qrcocode sucess", nil
+	return "", nil
 }
 
 // insert value and return a ID for URL
-func (a *NewCardMachineCase) InsertValueInTable(cents, real int64) (int, error) {
+func (a *NewCardMachineCase) InsertValueInTable(cents, real int64, typePayment model.PaymentType) (int, error) {
 	timeSale := time.Now().Format(time.RFC3339)
 	status := model.StatusPending
 	var timeApproved *string
 
-	_, id, err := a.repo.InsertValueInTableSale(timeSale, timeApproved, status, cents, real)
+	_, id, err := a.repo.InsertValueInTableSale(timeSale, timeApproved, status, cents, real, typePayment)
 
 	if err != nil {
 		return 0, err

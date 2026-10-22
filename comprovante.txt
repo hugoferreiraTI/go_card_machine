@@ -3,14 +3,14 @@
            APROVADO
 --------------------------------
 
-Valor: R$ 10.50
-Data: 2026-10-18T00:08:25-03:00
+Valor: R$ 25.90
+Data: 2026-10-19T19:28:47-03:00
 
-ID da venda: 1
+ID da venda: 3
 Status: APPROVED
 
 PAGADOR
-Nome: Hugo Ferreira
+Nome: testando ferreira
 CPF: 12345678901
 Instituição: Nubank
 

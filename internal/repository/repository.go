@@ -97,16 +97,17 @@ func (r *Repository) CreateTableSale() (sql.Result, error) {
 		time_aprove VARCHAR(255),
 		cents INTEGER NOT NULL,
 		real INTEGER NOT NULL,
-		status VARCHAR(255)  NOT NULL
+		status VARCHAR(255)  NOT NULL,
+		type_pay VARCHAR(255)
 	)`
 	return r.db.Exec(query)
 
 }
 
-func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, cents int64, real int64) (sql.Result, int, error) {
-	query := `INSERT INTO sales (time_sale, time_aprove, cents, real, status) VALUES( ?, ?, ?, ?, ?)`
+func (r *Repository) InsertValueInTableSale(time_sale string, time_aprove *string, status model.SaleStatus, cents int64, real int64, typePay model.PaymentType) (sql.Result, int, error) {
+	query := `INSERT INTO sales (time_sale, time_aprove, cents, real, status, type_pay) VALUES( ?, ?, ?, ?, ?, ?)`
 	// Insert the values in the table CardMachine
-	result, err := r.db.Exec(query, time_sale, time_aprove, cents, real, status) //insert the arguments in the quer and execute the query in the database
+	result, err := r.db.Exec(query, time_sale, time_aprove, cents, real, status, typePay) //insert the arguments in the quer and execute the query in the database
 	if err != nil {
 		return nil, 0, err
 	}
