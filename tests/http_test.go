@@ -106,7 +106,7 @@ func TestHttPostSale(t *testing.T) {
 	handlerCase := handler.NewHandlerCase(authCase, paymentCase)
 	// Create the route
 	router := gin.Default()
-	router.POST("/postSales", handlerCase.PostSalePix)
+	router.POST("/postSales", handlerCase.PostSale)
 
 	// Create a test request with the JSON body
 	jsoBody := []byte(`{

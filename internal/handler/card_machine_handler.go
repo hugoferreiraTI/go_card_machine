@@ -50,7 +50,7 @@ func (h *HandlerCase) InsertValueInCardMachine(c *gin.Context) {
 
 }
 
-func (h *HandlerCase) PostSalePix(c *gin.Context) {
+func (h *HandlerCase) PostSale(c *gin.Context) {
 	var sale model.Sale
 
 	if err := c.BindJSON(&sale); err != nil {
@@ -90,6 +90,44 @@ func (h *HandlerCase) PaymentPix(c *gin.Context) {
 	//Prevent the request from blocking if no payment listener is active.
 	select {
 	case h.NewPaymentPixCase.PaymentChan <- attempt:
+		//value envied for PaymentChan
+	case <-time.After(1 * time.Second):
+		c.JSON(http.StatusConflict, gin.H{
+			"error": "The time for payment expired or sale dont existed",
+		})
+		return
+	}
+
+	status := <-attempt.Response
+
+	if status == model.StatusApproved {
+		c.JSON(http.StatusOK, gin.H{
+			"status": status,
+		})
+		return
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"status": status,
+	})
+}
+
+func (h *HandlerCase) PaymentCard(c *gin.Context) {
+	var card model.EmvTags                      //json recive
+	responseChan := make(chan model.SaleStatus) //create a channel
+
+	if err := c.BindJSON(&card); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
+		return
+	}
+
+	attempt := usecases.PaymentCard{
+		Tag:      card,
+		Response: responseChan,
+	}
+
+	//Prevent the request from blocking if no payment listener is active.
+	select {
+	case h.NewPaymentCardCase.PaymentChan <- attempt:
 		//value envied for PaymentChan
 	case <-time.After(1 * time.Second):
 		c.JSON(http.StatusConflict, gin.H{

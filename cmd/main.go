@@ -50,7 +50,8 @@ func main() {
 	authRepository.CreateTableSale()
 
 	server.POST("/card_machine", authHandler.InsertValueInCardMachine) //initialize the card machine first.
-	server.POST("/Sale/pix", authHandler.PostSalePix)
+	server.POST("/Sale", authHandler.PostSale)
 	server.POST("/Pay/pix", authHandler.PaymentPix)
+	server.POST("/Pay/card", authHandler.PaymentCard)
 	server.Run(":8080")
 }

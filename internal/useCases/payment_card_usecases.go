@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/hugoferreiraTI/AES_CMAC_Go/cmac"
 	"github.com/joho/godotenv"
 )
@@ -41,8 +41,8 @@ func NewPaymentCardDependencyCase(repo *repository.Repository, kafkaCase *kafka_
 
 func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int) (model.SaleStatus, error) {
 	amount := fmt.Sprintf("%d.%02d", real, cents)
-	time_now := time.Now().Format(time.RFC3339)
-	time := string(time_now)
+	timeNow := time.Now().Format(time.RFC3339)
+	time := string(timeNow)
 
 	result, statusInDb, err := c.repo.ValidatePendingSale(id)
 
@@ -58,37 +58,55 @@ func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int) (model.S
 		return statusInDb, nil
 	}
 
-	uuidCrypto := uuid.New()
-
-	cryptogram := model.Cryptogram{
-		StatusCard:               statusInDb,
-		AmountCrypt:              amount,
-		TimeNowCrypt:             time,
-		NumberUnpredictableCrypt: uuidCrypto.String(),
+	saleData := model.CardSale{
+		SaleId:      id,
+		Amount:      amount,
+		PaymentType: model.Debit,
+		TimeNow:     time,
+		Status:      model.StatusPending,
 	}
-
-	cryptogramResult, err := c.Crypto(cryptogram)
-	if err != nil {
-		return model.StatusReproved, err
-	}
-
-	unpredictableNumber, err := c.generateUnpredictableNumber()
-	if err != nil {
-		return model.StatusReproved, err
-	}
-
-	fmt.Print(unpredictableNumber)
-
-	fmt.Print(cryptogramResult)
+	go c.WaitPaymentCard(c.PaymentChan, saleData, id)
 
 	return model.StatusApproved, nil
 }
 
-func (c *NewPaymentCardCase) PaymentCard(tags model.EmvTags, id int) (model.SaleStatus, error) {
+func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.CardSale, id int) (model.SaleStatus, error) {
+	numberUnpredictable, err := c.GenerateUnpredictableNumber()
+	if err != nil {
+		return model.StatusReproved, err
+	}
+	crypto := model.Cryptogram{
+		StatusCard:               saleData.Status,
+		AmountCrypt:              saleData.Amount,
+		TimeNowCrypt:             saleData.TimeNow,
+		NumberUnpredictableCrypt: numberUnpredictable,
+	}
+
+	cryptogram, err := c.Crypto(crypto)
+	if err != nil {
+		return model.StatusReproved, err
+	}
+
+	emvTlv, err := c.Tlv(tags, cryptogram, numberUnpredictable)
+	if err != nil {
+		return model.StatusReproved, err
+	}
+
+	cardPayment := model.CardPayment{
+		SaleId:      id,
+		TimeNow:     saleData.TimeNow,
+		Amount:      saleData.Amount,
+		Status:      saleData.Status,
+		PaymentType: model.Debit,
+		Emv:         emvTlv,
+	}
+
+	json, _ := json.Marshal(cardPayment)
+	fmt.Print(json)
 	return model.StatusApproved, nil
 }
 
-func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, id int) (model.SaleStatus, error) {
+func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, saleData model.CardSale, id int) (model.SaleStatus, error) {
 	timer := time.NewTimer(30 * time.Second)
 	defer timer.Stop()
 
@@ -96,7 +114,7 @@ func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, id 
 	for {
 		select {
 		case attempt := <-paymentChan:
-			status, err := c.PaymentCard(attempt.Tag, id)
+			status, err := c.PaymentSaleCard(attempt.Tag, saleData, id)
 			if err != nil {
 				fmt.Print("pagamento reprovado")
 				attempt.Response <- status
@@ -156,10 +174,10 @@ func (c *NewPaymentCardCase) Crypto(cryptogram model.Cryptogram) (string, error)
 
 }
 
-func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredictableNumber []byte) (model.EmvTlv, error) {
+func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredictableNumber [4]byte) (model.EmvTlv, error) {
 	//format a date expirity em default tag
 	var day string
-	var mounth string
+	var month string
 	var year string
 
 	//format a slice of pan
@@ -172,11 +190,41 @@ func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredict
 	}
 
 	day = parts[0]
-	mounth = parts[1]
+	if len(day) != 2 {
+		return model.EmvTlv{}, errors.New("day must contain exactly 2 digits")
+	}
+	verifyDay, err := strconv.Atoi(day)
+	if err != nil {
+		return model.EmvTlv{}, err
+	}
+	if verifyDay > 31 || 1 > verifyDay {
+		return model.EmvTlv{}, errors.New("The days is invalid")
+	}
+	month = parts[1]
+	verifyMonth, err := strconv.Atoi(month)
+	if len(month) != 2 {
+		return model.EmvTlv{}, errors.New("month must contain exactly 2 digits")
+	}
+	if err != nil {
+		return model.EmvTlv{}, err
+	}
+	if verifyMonth > 12 || 1 > verifyMonth {
+		return model.EmvTlv{}, errors.New("The month is invalid")
+	}
 	year = parts[2]
+	if len(year) != 2 {
+		return model.EmvTlv{}, errors.New("year must contain exactly 2 digits")
+	}
+	verifyYears, err := strconv.Atoi(year)
+	if err != nil {
+		return model.EmvTlv{}, err
+	}
+	if verifyYears > 31 || verifyYears < 21 {
+		return model.EmvTlv{}, errors.New("The yeras is invalid")
+	}
 
 	//Creat the tag 5F24 in TLV mode
-	dateOfExpirity := fmt.Sprintf("%s%s%s", year, mounth, day)
+	dateOfExpirity := fmt.Sprintf("%s%s%s", year, month, day)
 	dateOfExpirityBytes, err := hex.DecodeString(dateOfExpirity)
 	tagStringDateOfExpirity := "5F24"
 	if err != nil {
@@ -196,7 +244,11 @@ func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredict
 	if err != nil {
 		return model.EmvTlv{}, err
 	}
-
+	//verify the pan
+	err = c.verifyThePan(emv.PAN)
+	if err != nil {
+		return model.EmvTlv{}, err
+	}
 	//Compact the values in two pars.
 	if len(emv.PAN)%2 != 0 {
 		emv.PAN += "F"
@@ -221,12 +273,12 @@ func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredict
 		return model.EmvTlv{}, err
 	}
 
-	valueCountryCode := emv.TransactionCountry
-
-	if len(valueCountryCode) == 3 {
-		valueCountryCode = "0" + valueCountryCode
+	err = c.verifyTheCountryCode(emv.TransactionCountry)
+	if err != nil {
+		return model.EmvTlv{}, err
 	}
 
+	valueCountryCode := "0" + emv.TransactionCountry
 	valueCountry, err := hex.DecodeString(valueCountryCode)
 	if err != nil {
 		return model.EmvTlv{}, err
@@ -280,7 +332,7 @@ func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredict
 		},
 		NumberUnpredictable: model.TLV{
 			Tag:    tagUnpredictableNumber,
-			Value:  unpredictableNumber,
+			Value:  unpredictableNumber[:],
 			Length: unpredictableNumberLen,
 		},
 		TransactionCountry: model.TLV{
@@ -298,7 +350,7 @@ func (c *NewPaymentCardCase) Tlv(emv model.EmvTags, cryptogram string, unpredict
 	return emvTlv, nil
 }
 
-func (c *NewPaymentCardCase) generateUnpredictableNumber() ([4]byte, error) {
+func (c *NewPaymentCardCase) GenerateUnpredictableNumber() ([4]byte, error) {
 	var value [4]byte
 
 	_, err := rand.Read(value[:])
@@ -342,4 +394,34 @@ func (c *NewPaymentCardCase) aesGcm(pin string) (string, error) {
 	payload := append(nonce, ciphertext...)
 
 	return hex.EncodeToString(payload), nil
+}
+
+func (c *NewPaymentCardCase) verifyThePan(pan string) error {
+	parts := pan
+
+	if len(parts) < 12 || len(parts) > 19 {
+		return errors.New("the value in PAN is incorrect")
+	}
+
+	for _, char := range parts {
+		if char < '0' || char > '9' {
+			return errors.New("PAN must contain only numbers")
+		}
+	}
+
+	return nil
+}
+
+func (c *NewPaymentCardCase) verifyTheCountryCode(countryCode string) error {
+	if len(countryCode) != 3 {
+		return errors.New("country code must contain exactly 3 digits")
+	}
+
+	for _, char := range countryCode {
+		if char < '0' || char > '9' {
+			return errors.New("country code must contain only numbers")
+		}
+	}
+
+	return nil
 }

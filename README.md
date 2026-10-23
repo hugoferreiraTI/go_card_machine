@@ -923,6 +923,8 @@ https://developer.visa.com/api-reference/visa-accept?utm_source=chatgpt.com
 https://www.google.com/search?q=EMV+global+tag&sca_esv=995ca91a96abc5c1&rlz=1C1GCEU_enBR1213BR1213&sxsrf=APpeQntB_F-km0Cqg-pw1bqOfwMXbygh7Q%3A1792426012471&ei=HEDWaq-iHKmI5OUP1IrRmAI&biw=1920&bih=919&uact=5&oq=EMV+global+tag&gs_lp=Egxnd3Mtd2l6LXNlcnAiDkVNViBnbG9iYWwgdGFnMgUQIRigATIFECEYoAFI2wNQAFi3AnAAeAGQAQCYAfIBoAHBB6oBBTAuMy4yuAEDyAEA-AEBmAIFoAK6CMICCBAAGIAEGMsBwgIGEAAYFhgemAMAkgcFMC4xLjSgB7kTsgcFMC4xLjS4B7oIwgcFMi0yLjPIByiACAE&sclient=gws-wiz-serp
 https://cryptoid.com.br/criptografia/aes-padrao-de-criptografia-avancado-o-que-e-e-como-funciona/
 https://csrc.nist.gov/pubs/sp/800/38/b/final
+https://zencopa.com/learn/introduction-to-aes-gcm-mode-and-its-advantages
+gemini.google.com/app?hl=pt-BR
 
 flow card: 
 O fluxo de uma transação com cartão

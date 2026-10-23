@@ -12,7 +12,7 @@ type EmvTlv struct {
 	PAN                 TLV //Tag EMV: 5A
 	DateExpiry          TLV //Tag EMV: 5F24
 	TransactionCountry  TLV //Tag EMV: 9F1A
-	Pin                 PIN //Tag EMV: 9F37
+	Pin                 PIN
 	NumberUnpredictable TLV //Tag EMV: 9F37
 	Cryptogram          TLV //Tag EMV: 9f26
 }
@@ -33,7 +33,7 @@ type PIN struct {
 type CVM string
 
 const (
-	CVMOnlinePIN  CVM = "ONLINE_PIN"
+	CVMOnlinePIN CVM = "ONLINE_PIN"
 )
 
 type CardPaymentType string
@@ -48,7 +48,7 @@ type Cryptogram struct {
 	StatusCard               SaleStatus //Status the sale
 	AmountCrypt              string     //Amount value
 	TimeNowCrypt             string     //Time of sale
-	NumberUnpredictableCrypt string     //hash generated in terminal
+	NumberUnpredictableCrypt [4]byte    //hash generated in terminal
 }
 
 type CardPayment struct {
@@ -64,4 +64,7 @@ type CardPayment struct {
 type CardSale struct {
 	PaymentType CardPaymentType
 	Amount      string
+	SaleId      int
+	TimeNow     string
+	Status      SaleStatus
 }
