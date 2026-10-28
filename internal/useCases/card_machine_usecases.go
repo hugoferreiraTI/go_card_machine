@@ -23,12 +23,14 @@ type NewCardMachineCase struct {
 func NewCardMachineCaseDependency(
 	repo *repository.Repository,
 	paymentCase *NewPaymenteCase,
+	paymentCardCase *NewPaymentCardCase,
 	kafkaCase *kafka_config.NewProducerCase,
 ) *NewCardMachineCase {
 	return &NewCardMachineCase{
-		repo:           repo,
-		paymentPixCase: paymentCase,
-		kafkaCase:      kafkaCase,
+		repo:            repo,
+		paymentPixCase:  paymentCase,
+		paymentCardCase: paymentCardCase,
+		kafkaCase:       kafkaCase,
 	}
 }
 

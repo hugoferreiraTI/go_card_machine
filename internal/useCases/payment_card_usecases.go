@@ -1,6 +1,7 @@
 package usecases
 
 import (
+	"card_machine/internal/client"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
 	"card_machine/internal/repository"
@@ -8,7 +9,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +24,7 @@ type NewPaymentCardCase struct {
 	repo        *repository.Repository
 	kafkaCase   *kafka_config.NewProducerCase
 	PaymentChan chan PaymentCard
+	PSPClient   *client.PSPClient
 }
 
 type PaymentCard struct {
@@ -31,10 +32,11 @@ type PaymentCard struct {
 	Response chan model.SaleStatus
 }
 
-func NewPaymentCardDependencyCase(repo *repository.Repository, kafkaCase *kafka_config.NewProducerCase) *NewPaymentCardCase {
+func NewPaymentCardDependencyCase(repo *repository.Repository, kafkaCase *kafka_config.NewProducerCase, PSPClient *client.PSPClient) *NewPaymentCardCase {
 	return &NewPaymentCardCase{
 		repo:        repo,
 		kafkaCase:   kafkaCase,
+		PSPClient:   PSPClient,
 		PaymentChan: make(chan PaymentCard),
 	}
 }
@@ -67,13 +69,13 @@ func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int) (model.S
 	}
 	go c.WaitPaymentCard(c.PaymentChan, saleData, id)
 
-	return model.StatusApproved, nil
+	return model.StatusPending, nil
 }
 
-func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.CardSale, id int) (model.SaleStatus, error) {
+func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.CardSale, id int) (model.AuthorizationResponse, error) {
 	numberUnpredictable, err := c.GenerateUnpredictableNumber()
 	if err != nil {
-		return model.StatusReproved, err
+		return model.AuthorizationResponse{}, err
 	}
 	crypto := model.Cryptogram{
 		StatusCard:               saleData.Status,
@@ -84,12 +86,12 @@ func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.
 
 	cryptogram, err := c.Crypto(crypto)
 	if err != nil {
-		return model.StatusReproved, err
+		return model.AuthorizationResponse{}, err
 	}
 
 	emvTlv, err := c.Tlv(tags, cryptogram, numberUnpredictable)
 	if err != nil {
-		return model.StatusReproved, err
+		return model.AuthorizationResponse{}, err
 	}
 
 	cardPayment := model.CardPayment{
@@ -101,10 +103,14 @@ func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.
 		Emv:         emvTlv,
 	}
 
-	json, _ := json.Marshal(cardPayment)
-	fmt.Print(json)
-	return model.StatusApproved, nil
+	resp, err := c.PSPClient.PSP(cardPayment)
+	if err != nil {
+		return model.AuthorizationResponse{}, err
+	}
+	return resp, nil
 }
+
+///authorize/card
 
 func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, saleData model.CardSale, id int) (model.SaleStatus, error) {
 	timer := time.NewTimer(30 * time.Second)
@@ -114,18 +120,18 @@ func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, sal
 	for {
 		select {
 		case attempt := <-paymentChan:
-			status, err := c.PaymentSaleCard(attempt.Tag, saleData, id)
+			resp, err := c.PaymentSaleCard(attempt.Tag, saleData, id)
 			if err != nil {
 				fmt.Print("pagamento reprovado")
-				attempt.Response <- status
-				return status, err
+				attempt.Response <- resp.Status
+				return resp.Status, err
 			}
 
 			//if status == model.StatusReproved {
 			//	fmt.Print(model.StatusReproved)
 			//} use for verify the result in test.
-			attempt.Response <- status
-			if status == model.StatusApproved {
+			attempt.Response <- resp.Status
+			if resp.Status == model.StatusApproved {
 				return model.StatusApproved, nil
 			}
 			//if the time concluide are stop the loop (expired)

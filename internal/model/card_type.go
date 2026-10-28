@@ -19,12 +19,11 @@ type EmvTlv struct {
 
 // tags EMV minimal IN json
 type EmvTags struct {
-	PAN                string `json:"PAN" binding:"required, max=19"`          //Tag EMV: 5A
-	DateExpiry         string `json:"dateExpirity" binding:"required, max=6"`  //Tag EMV: 5F24
-	TransactionCountry string `json:"Country"  binding:"required,min=3,max=3"` //Tag EMV: 9F1A
-	Pin                PIN    `json:"Pin" binding:"required,min=4,max=6"`      //Tratamento proprio
+	PAN                string `json:"PAN" binding:"required,min=12,max=19"`
+	DateExpiry         string `json:"dateExpirity" binding:"required,len=8"`
+	TransactionCountry string `json:"Country" binding:"required,len=3"`
+	Pin                PIN    `json:"Pin" binding:"required"`
 }
-
 type PIN struct {
 	PIN string
 	CVM CVM
@@ -52,11 +51,11 @@ type Cryptogram struct {
 }
 
 type CardPayment struct {
-	SaleId      int
-	TimeNow     string
-	Amount      string
-	Status      SaleStatus
-	PaymentType CardPaymentType `json:"TyPay" binding:"required"`
+	SaleId      int             `json:"SaleId"`
+	TimeNow     string          `json:"TimeNow"`
+	Amount      string          `json:"Amount"`
+	Status      SaleStatus      `json:"Status"`
+	PaymentType CardPaymentType `json:"PaymentType" binding:"required"`
 	Emv         EmvTlv          `json:"Emv" binding:"required"`
 }
 

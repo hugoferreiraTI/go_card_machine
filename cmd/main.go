@@ -2,17 +2,20 @@ package main
 
 import (
 	"card_machine/documents"
+	"card_machine/internal/client"
 	"card_machine/internal/handler"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/repository"
 	usecases "card_machine/internal/useCases"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	//initialize the database connection
+	// initialize the database connection
 	dbConnection, err, version := repository.DbConnection()
 	fmt.Println("Version SQLIte: ", version)
 
@@ -21,37 +24,68 @@ func main() {
 	}
 	defer dbConnection.Close()
 
-	produce, _ := kafka_config.NewKafkaProducer() //initializer the producer
+	// Kafka
+	produce, _ := kafka_config.NewKafkaProducer()
 
 	consumer, err := kafka_config.NewKafkaConsumer()
-
 	if err != nil {
 		panic(err)
-	} //initialize the consumer kafka
+	}
 
 	consumerCase := kafka_config.NewConsumerDependency(consumer)
-
 	go consumerCase.ConsumerGo()
 
 	kafkaProduceCase := kafka_config.NewProducerCaseDependency(produce)
 
-	//injection of dependencies
-	authRepository := repository.NewRepository(dbConnection)
-	authPayment := usecases.NewPaymentCase(authRepository, kafkaProduceCase)
-	authUseCase := usecases.NewCardMachineCaseDependency(authRepository, authPayment, kafkaProduceCase)
-	authHandler := handler.NewHandlerCase(authUseCase, authPayment)
+	// PSP Client
+	pspClient := &client.PSPClient{
+		BaseURL: "http://localhost:8080",
+		HTTPClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
 
-	//initialize the Gin router
+	// Repository
+	authRepository := repository.NewRepository(dbConnection)
+
+	// Usecases
+	authPayment := usecases.NewPaymentCase(
+		authRepository,
+		kafkaProduceCase,
+	)
+
+	authPaymentCard := usecases.NewPaymentCardDependencyCase(
+		authRepository,
+		kafkaProduceCase,
+		pspClient,
+	)
+
+	authUseCase := usecases.NewCardMachineCaseDependency(
+		authRepository,
+		authPayment,
+		authPaymentCard, // <-- FALTAVA ISSO
+		kafkaProduceCase,
+	)
+
+	// Handler
+	authHandler := handler.NewHandlerCase(
+		authUseCase,
+		authPayment,
+		authPaymentCard,
+	)
+
+	// Gin
 	server := gin.Default()
+
 	documents.RegisterRoutes(server)
 
-	//create the table
 	authRepository.CreateTableOfCardMachine()
 	authRepository.CreateTableSale()
 
-	server.POST("/card_machine", authHandler.InsertValueInCardMachine) //initialize the card machine first.
+	server.POST("/card_machine", authHandler.InsertValueInCardMachine)
 	server.POST("/Sale", authHandler.PostSale)
 	server.POST("/Pay/pix", authHandler.PaymentPix)
 	server.POST("/Pay/card", authHandler.PaymentCard)
-	server.Run(":8080")
+
+	server.Run(":8081")
 }

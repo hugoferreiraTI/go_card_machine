@@ -2,6 +2,7 @@ package test_sql
 
 import (
 	"bytes"
+	"card_machine/internal/client"
 	"card_machine/internal/handler"
 	"card_machine/internal/kafka_config"
 	"card_machine/internal/model"
@@ -9,6 +10,7 @@ import (
 	usecases "card_machine/internal/useCases"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -49,7 +51,7 @@ func TestPutStatus(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	_ = handler.NewHandlerCase(authCase, paymentCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase, &usecases.NewPaymentCardCase{})
 
 	status, err := paymentCase.Payment(value, id)
 
@@ -106,7 +108,7 @@ func TestPaymentPix(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	_ = handler.NewHandlerCase(authCase, paymentCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase, &usecases.NewPaymentCardCase{})
 
 	status, err := paymentCase.WaitPaytament(amount, id)
 
@@ -143,13 +145,21 @@ func TestProcessSaleCard(t *testing.T) {
 		os.Exit(1)
 	}
 
+	//Initialize client
+	pspClient := &client.PSPClient{
+		BaseURL: "http://localhost:8000",
+		HTTPClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+
 	//Initialize the repository with dependency
 	repo := repository.NewRepository(db)
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
-	paymentCardCase := usecases.NewPaymentCardDependencyCase(repo, kafkaCase)
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(repo, kafkaCase, pspClient)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	_ = handler.NewHandlerCase(authCase, paymentCase)
+	_ = handler.NewHandlerCase(authCase, paymentCase, &usecases.NewPaymentCardCase{})
 
 	var real int64
 	var cents int64
@@ -191,7 +201,7 @@ func TestCrypto(t *testing.T) {
 		}
 	}()
 
-	paymentCardCase := usecases.NewPaymentCardDependencyCase(nil, nil)
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(nil, nil, nil)
 
 	unpredictableNumber, err := paymentCardCase.GenerateUnpredictableNumber()
 	if err != nil {
@@ -254,7 +264,7 @@ func TestTlv(t *testing.T) {
 		}
 	}()
 
-	paymentCardCase := usecases.NewPaymentCardDependencyCase(nil, nil)
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(nil, nil, nil)
 
 	emv := model.EmvTags{
 		PAN:                "1234567890123456",

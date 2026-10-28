@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"card_machine/internal/handler"
 	"card_machine/internal/kafka_config"
+	"card_machine/internal/model"
 	"card_machine/internal/repository"
 	usecases "card_machine/internal/useCases"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/gin-gonic/gin"
@@ -41,7 +43,7 @@ func TestHttpInsertValue(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	handlerCase := handler.NewHandlerCase(authCase, paymentCase)
+	handlerCase := handler.NewHandlerCase(authCase, &usecases.NewPaymenteCase{}, &usecases.NewPaymentCardCase{})
 	// Create the route
 	router := gin.Default()
 	router.POST("/card_machine", handlerCase.InsertValueInCardMachine)
@@ -103,7 +105,7 @@ func TestHttPostSale(t *testing.T) {
 	kafkaCase := kafka_config.NewProducerCaseDependency(produce)
 	paymentCase := usecases.NewPaymentCase(repo, kafkaCase)
 	authCase := usecases.NewCardMachineCaseDependency(repo, paymentCase, kafkaCase)
-	handlerCase := handler.NewHandlerCase(authCase, paymentCase)
+	handlerCase := handler.NewHandlerCase(authCase, paymentCase, &usecases.NewPaymentCardCase{})
 	// Create the route
 	router := gin.Default()
 	router.POST("/postSales", handlerCase.PostSale)
@@ -134,4 +136,40 @@ func TestHttPostSale(t *testing.T) {
 	if recorder.Body.String() != expectedResponse {
 		t.Errorf("Expected response body %s, but got %s", expectedResponse, recorder.Body.String())
 	}
+}
+
+func TestPaymentSaleCard(t *testing.T) {
+	// Nenhuma dependência externa é necessária
+	paymentCardCase := usecases.NewPaymentCardDependencyCase(nil, nil, nil)
+
+	tags := model.EmvTags{
+		PAN:                "4111111111111111",
+		DateExpiry:         "25/12/27",
+		TransactionCountry: "076",
+		Pin: model.PIN{
+			PIN: "1234",
+			CVM: "ONLINE_PIN",
+		},
+	}
+
+	sale := model.CardSale{
+		SaleId:      1,
+		Amount:      "25.90",
+		PaymentType: model.Debit,
+		TimeNow:     time.Now().Format(time.RFC3339),
+		Status:      model.StatusPending,
+	}
+
+	status, err := paymentCardCase.PaymentSaleCard(tags, sale, 1)
+
+	if err != nil {
+		t.Fatalf("Erro ao processar pagamento: %v", err)
+	}
+
+	if status != model.StatusApproved {
+		t.Fatalf("Status inesperado: %v", status)
+	}
+
+	t.Logf("Status final: %s", status)
+	t.Log("Processamento do cartão concluído sem erros")
 }

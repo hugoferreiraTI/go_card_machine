@@ -18,10 +18,12 @@ type HandlerCase struct {
 func NewHandlerCase(
 	cardMachineCase *usecases.NewCardMachineCase,
 	paymentPixCase *usecases.NewPaymenteCase,
+	NewPaymentCardCase *usecases.NewPaymentCardCase,
 ) *HandlerCase {
 	return &HandlerCase{
 		NewCardMachineCase: cardMachineCase,
 		NewPaymentPixCase:  paymentPixCase,
+		NewPaymentCardCase: NewPaymentCardCase,
 	}
 }
 
