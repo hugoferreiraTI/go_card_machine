@@ -1,14 +1,13 @@
 # Card Machine · H-BANK
 
-**PT:** Simulador de maquininha de pagamentos em Go, com vendas por **Pix, débito e crédito**, persistência local, processamento concorrente, eventos Kafka e comprovantes. O projeto faz parte da construção do ecossistema **H-BANK** e trabalha em conjunto com a [PSP Go](https://github.com/hugoferreiraTI/psp_go).
+Escolha o idioma / Choose your language.
 
-**EN:** A payment-terminal simulator written in Go. It supports **Pix, debit and credit** workflows, local persistence, concurrent payment handling, Kafka events and receipts. It is being developed as part of the **H-BANK** ecosystem and integrates with [PSP Go](https://github.com/hugoferreiraTI/psp_go).
+<details>
+<summary>🇧🇷 Português</summary>
 
-**Em desenvolvimento / Work in progress.** O Pix é uma simulação local. **Os pagamentos com cartão só funcionam em conjunto com a PSP:** a Card Machine prepara a requisição; a PSP valida o cartão e decide a autorização. / Pix is simulated locally. **Card payments require the PSP:** the terminal prepares the request, while the PSP validates the card and makes the authorization decision.
+Simulador de maquininha de pagamentos em Go, com vendas por **Pix, débito e crédito**, persistência local, processamento concorrente, eventos Kafka e comprovantes. O projeto faz parte da construção do ecossistema **H-BANK** e trabalha em conjunto com a [PSP Go](https://github.com/hugoferreiraTI/psp_go).
 
-[Português](#português) · [English](#english) · [Fontes e referências / Sources and references](#sources-and-references)
-
-## Português
+**Em desenvolvimento.** O Pix é uma simulação local. **Os pagamentos com cartão só funcionam em conjunto com a PSP:** a Card Machine prepara a requisição; a PSP valida o cartão e decide a autorização.
 
 ### O que o projeto faz
 
@@ -403,7 +402,14 @@ go test -v ./...
 
 O estado atual já inclui cartões e comunicação HTTP com a PSP. Próximas evoluções podem incluir idempotência, correlação mais forte de tentativas, reconciliação entre o estado local e a PSP, melhoria do tratamento de falhas e persistência monetária em uma única coluna de centavos. Esses itens não são apresentados como garantias implementadas.
 
-## English
+</details>
+
+<details>
+<summary>🇺🇸 English</summary>
+
+A payment-terminal simulator written in Go. It supports **Pix, debit and credit** workflows, local persistence, concurrent payment handling, Kafka events and receipts. It is being developed as part of the **H-BANK** ecosystem and integrates with [PSP Go](https://github.com/hugoferreiraTI/psp_go).
+
+**Work in progress.** Pix is simulated locally. **Card payments require the PSP:** the terminal prepares the request, while the PSP validates the card and makes the authorization decision.
 
 ### Overview and supported payments
 
@@ -630,9 +636,12 @@ go test -v ./...
 
 Card support and HTTP PSP integration are already implemented. Future work can address idempotency, stronger attempt correlation, reconciliation between terminal and PSP state, failure recovery and consolidation of monetary storage into integer cents. These remain development goals rather than existing guarantees.
 
-<a id="sources-and-references"></a>
+</details>
 
-## Fontes e referências / Sources and references
+<details>
+<summary>📚 Fontes e referências / Sources and references</summary>
+
+<a id="sources-and-references"></a>
 
 As URLs abaixo registram as fontes e materiais de estudo do projeto. Os links da versão anterior foram preservados e organizados por finalidade; materiais introdutórios e ferramentas não substituem especificações normativas. Os detalhes de comportamento descritos neste README foram conferidos no código atual.
 
@@ -673,3 +682,5 @@ The links below document the project's study material and technical references. 
 - [Card Machine — código deste projeto / this project](https://github.com/hugoferreiraTI/go_card_machine).
 - [PSP Go — autorização e persistência bancária / authorization and bank-side persistence](https://github.com/hugoferreiraTI/psp_go).
 - [AES_CMAC_Go — biblioteca de CMAC do autor / author’s CMAC library](https://github.com/hugoferreiraTI/AES_CMAC_GO).
+
+</details>
