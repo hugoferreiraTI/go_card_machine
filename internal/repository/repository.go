@@ -126,7 +126,7 @@ func (r *Repository) InserTimeAprove(time_aprove string, id int) (sql.Result, er
 	result, err := r.db.Exec(query, time_aprove, id)
 
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 
 	return result, nil
@@ -176,7 +176,7 @@ func (r *Repository) GetTimeArove(id int) (string, error) {
 
 	err := r.db.QueryRow(query, id).Scan(&time)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	return time, nil

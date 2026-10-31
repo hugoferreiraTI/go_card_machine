@@ -114,8 +114,8 @@ func (h *HandlerCase) PaymentPix(c *gin.Context) {
 }
 
 func (h *HandlerCase) PaymentCard(c *gin.Context) {
-	var card model.EmvTags                      //json recive
-	responseChan := make(chan model.SaleStatus) //create a channel
+	var card model.EmvTags                                 //json recive
+	responseChan := make(chan model.AuthorizationResponse) //create a channel
 
 	if err := c.BindJSON(&card); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "json inválido"})
@@ -138,15 +138,17 @@ func (h *HandlerCase) PaymentCard(c *gin.Context) {
 		return
 	}
 
-	status := <-attempt.Response
+	response := <-attempt.Response
 
-	if status == model.StatusApproved {
+	if response.Status == model.StatusApproved {
 		c.JSON(http.StatusOK, gin.H{
-			"status": status,
+			"status": response.Status,
+			"log":    response.Log,
 		})
 		return
 	}
 	c.JSON(http.StatusBadRequest, gin.H{
-		"status": status,
+		"status": response.Status,
+		"log":    response.Log,
 	})
 }

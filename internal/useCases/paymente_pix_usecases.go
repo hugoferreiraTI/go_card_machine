@@ -154,7 +154,7 @@ func (p *NewPaymenteCase) Payment(payer model.Pix, id int) (model.SaleStatus, er
 	if err != nil {
 		return model.StatusReproved, err
 	}
-	p.taxReceipt(*receiver, id, payer.AmountPix, timeAprove, model.StatusApproved, payer)
+	p.taxReceiptPix(*receiver, id, payer.AmountPix, timeAprove, model.StatusApproved, payer)
 
 	return model.StatusApproved, nil
 }
@@ -203,7 +203,7 @@ func (p *NewPaymenteCase) WaitPaytament(paymentChan <-chan PaymentAttempt, id in
 	}
 }
 
-func (p *NewPaymenteCase) taxReceipt(data model.CardMachine, id int, value string, time string, status model.SaleStatus, payer model.Pix) {
+func (p *NewPaymenteCase) taxReceiptPix(data model.CardMachine, id int, value string, time string, status model.SaleStatus, payer model.Pix) {
 	text := fmt.Sprintf(`--------------------------------
         COMPROVANTE PIX
            APROVADO

@@ -9,4 +9,6 @@ type AuthorizationResponse struct {
 	CardNetwork string          `json:"card_network"`
 	IssuerBank  string          `json:"issuer_bank"`
 	Amount      string          `json:"amount"`
+	TimeNow     string          `json:"time_now"`
+	Log         string          `json:"log"`
 }

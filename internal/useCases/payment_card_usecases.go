@@ -29,7 +29,7 @@ type NewPaymentCardCase struct {
 
 type PaymentCard struct {
 	Tag      model.EmvTags
-	Response chan model.SaleStatus
+	Response chan model.AuthorizationResponse
 }
 
 func NewPaymentCardDependencyCase(repo *repository.Repository, kafkaCase *kafka_config.NewProducerCase, PSPClient *client.PSPClient) *NewPaymentCardCase {
@@ -41,7 +41,7 @@ func NewPaymentCardDependencyCase(repo *repository.Repository, kafkaCase *kafka_
 	}
 }
 
-func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int) (model.SaleStatus, error) {
+func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int, cardType model.Sale) (model.SaleStatus, error) {
 	amount := fmt.Sprintf("%d.%02d", real, cents)
 	timeNow := time.Now().Format(time.RFC3339)
 	time := string(timeNow)
@@ -63,7 +63,7 @@ func (c *NewPaymentCardCase) ProcessSaleCard(real, cents int64, id int) (model.S
 	saleData := model.CardSale{
 		SaleId:      id,
 		Amount:      amount,
-		PaymentType: model.Debit,
+		PaymentType: cardType.PaymentType,
 		TimeNow:     time,
 		Status:      model.StatusPending,
 	}
@@ -86,12 +86,16 @@ func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.
 
 	cryptogram, err := c.Crypto(crypto)
 	if err != nil {
-		return model.AuthorizationResponse{}, err
+		return model.AuthorizationResponse{
+			Status: model.StatusReproved,
+		}, err
 	}
 
 	emvTlv, err := c.Tlv(tags, cryptogram, numberUnpredictable)
 	if err != nil {
-		return model.AuthorizationResponse{}, err
+		return model.AuthorizationResponse{
+			Status: model.StatusReproved,
+		}, err
 	}
 
 	cardPayment := model.CardPayment{
@@ -99,14 +103,53 @@ func (c *NewPaymentCardCase) PaymentSaleCard(tags model.EmvTags, saleData model.
 		TimeNow:     saleData.TimeNow,
 		Amount:      saleData.Amount,
 		Status:      saleData.Status,
-		PaymentType: model.Debit,
+		PaymentType: saleData.PaymentType,
 		Emv:         emvTlv,
 	}
 
 	resp, err := c.PSPClient.PSP(cardPayment)
 	if err != nil {
-		return model.AuthorizationResponse{}, err
+		if resp.Status == "" {
+			resp.Status = model.StatusReproved
+		}
+		return resp, err
 	}
+
+	if resp.Status != model.StatusApproved {
+		return resp, errors.New("Pagamento reprovado")
+	}
+
+	cardMachineData, err := c.repo.GetAllValuesInCardMachine()
+	if err != nil {
+		return model.AuthorizationResponse{
+			Status: model.StatusReproved,
+		}, err
+	}
+
+	_, err = c.repo.PutValueStatus(id, model.StatusApproved)
+	if err != nil {
+		return model.AuthorizationResponse{
+			Status: model.StatusReproved,
+		}, err
+	}
+
+	time_aprove := string(time.Now().Format(time.RFC3339))
+	_, err = c.repo.InserTimeAprove(time_aprove, id)
+	if err != nil {
+		return model.AuthorizationResponse{
+			Status: model.StatusReproved,
+		}, err
+	}
+
+	c.taxReceiptCard(resp, id, *cardMachineData)
+
+	event := model.PaymentKafka{
+		SaleId: id,
+		Value:  resp.Amount,
+		Status: resp.Status,
+	}
+	c.kafkaCase.ProducerGo(event)
+
 	return resp, nil
 }
 
@@ -122,15 +165,22 @@ func (c *NewPaymentCardCase) WaitPaymentCard(paymentChan <-chan PaymentCard, sal
 		case attempt := <-paymentChan:
 			resp, err := c.PaymentSaleCard(attempt.Tag, saleData, id)
 			if err != nil {
-				fmt.Print("pagamento reprovado")
-				attempt.Response <- resp.Status
+				resp.Status = model.StatusReproved
+				attempt.Response <- resp
+				c.repo.PutValueStatus(id, model.StatusReproved)
+
+				event := model.PaymentKafka{
+					SaleId: id,
+					Value:  resp.Amount,
+					Status: resp.Status,
+				}
+				c.kafkaCase.ProducerGo(event)
+				fmt.Print(resp.Log)
 				return resp.Status, err
 			}
 
-			//if status == model.StatusReproved {
-			//	fmt.Print(model.StatusReproved)
 			//} use for verify the result in test.
-			attempt.Response <- resp.Status
+			attempt.Response <- resp
 			if resp.Status == model.StatusApproved {
 				return model.StatusApproved, nil
 			}
@@ -430,4 +480,37 @@ func (c *NewPaymentCardCase) verifyTheCountryCode(countryCode string) error {
 	}
 
 	return nil
+}
+
+func (c *NewPaymentCardCase) taxReceiptCard(data model.AuthorizationResponse, id int, cardMachine model.CardMachine) {
+	text := fmt.Sprintf(`--------------------------------
+        COMPROVANTE CARD
+           APROVADO
+--------------------------------
+
+Valor: R$ %s
+Data: %s
+Tipo: R$ %s
+
+ID da venda: %d
+Status: %s
+
+PAGADOR
+Instituição: %s
+Bandeira: %s
+
+RECEBEDOR
+Nome: %s
+CPF/CNPJ: %s
+Instituição: %s
+
+--------------------------------
+Pagamento realizado via cartão
+--------------------------------`,
+		data.Amount, data.TimeNow, data.PaymentType, id, data.Status, data.IssuerBank, data.CardNetwork, cardMachine.PersonNameStorage, cardMachine.PersonCpf, cardMachine.BankInstituition)
+	fmt.Println(text)
+
+	byteText := []byte(text)
+
+	os.WriteFile("comprovante_card.txt", byteText, 0644)
 }

@@ -97,7 +97,14 @@ func (a *NewCardMachineCase) PostSale(sale model.Sale) (string, error) {
 			return "", err
 		}
 
-		result, err := a.paymentCardCase.ProcessSaleCard(real, cents, id)
+		event := model.PaymentKafka{
+			SaleId: id,
+			Value:  sale.Amount,
+			Status: model.StatusPending,
+		}
+		a.kafkaCase.ProducerGo(event)
+
+		result, err := a.paymentCardCase.ProcessSaleCard(real, cents, id, sale)
 		if err != nil {
 			return "", err
 		}

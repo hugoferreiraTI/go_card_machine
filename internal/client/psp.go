@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"card_machine/internal/model"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 )
 
@@ -36,10 +38,18 @@ func (p *PSPClient) PSP(cardPayment model.CardPayment) (model.AuthorizationRespo
 	}
 	defer resp.Body.Close()
 
+	// Uma falha HTTP não pode ser convertida em aprovação pelo conteúdo do corpo.
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return model.AuthorizationResponse{}, fmt.Errorf("PSP retornou HTTP %d", resp.StatusCode)
+	}
+
 	err = json.NewDecoder(resp.Body).Decode(&authorizationResponse)
 	if err != nil {
 		return model.AuthorizationResponse{}, err
 	}
 
+	if authorizationResponse.Status != model.StatusApproved {
+		return authorizationResponse, errors.New("Pagamento negado - consulte seu banco")
+	}
 	return authorizationResponse, nil
 }

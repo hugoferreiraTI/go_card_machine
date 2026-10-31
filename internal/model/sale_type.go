@@ -8,6 +8,7 @@ const (
 )
 
 type Sale struct {
-	Amount  string      `json:"Amount" binding:"required"`
-	PayType PaymentType `json:"Type" binding:"required"`
+	Amount      string          `json:"Amount" binding:"required"`
+	PayType     PaymentType     `json:"Type" binding:"required"`
+	PaymentType CardPaymentType `json:"payment_type"`
 }
