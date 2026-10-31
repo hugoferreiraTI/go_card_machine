@@ -1,0 +1,24 @@
+--------------------------------
+        COMPROVANTE CARD
+           APROVADO
+--------------------------------
+
+Valor: R$ 1.33
+Data: 2026-10-31T13:22:56-03:00
+Tipo: R$ DEBIT
+
+ID da venda: 3
+Status: APPROVED
+
+PAGADOR
+Instituição: ITAU
+Bandeira: MASTERCARD
+
+RECEBEDOR
+Nome: Hugo Teste
+CPF/CNPJ: 12345678901
+Instituição: ITAU
+
+--------------------------------
+Pagamento realizado via cartão
+--------------------------------
